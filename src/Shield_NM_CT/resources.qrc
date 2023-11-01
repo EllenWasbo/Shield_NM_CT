@@ -38,6 +38,7 @@
 		<file alias="refresh.png">icons\refresh.png</file>
 		<file alias="rename.png">icons\rename.png</file>
 		<file alias="save.png">icons\save.png</file>
+		<file alias="save_as.png">icons\save_as.png</file>
 		<file alias="search.png">icons\search.png</file>
 		<file alias="selectArrow.png">icons\selectArrow.png</file>
 		<file alias="sortAZ.png">icons\sortAZ.png</file>
@@ -72,6 +73,7 @@
 		<file alias="refresh.png">icons\darkmode\refresh.png</file>
 		<file alias="rename.png">icons\darkmode\rename.png</file>
 		<file alias="save.png">icons\darkmode\save.png</file>
+		<file alias="save_as.png">icons\darkmode\save_as.png</file>
 		<file alias="search.png">icons\darkmode\search.png</file>
 		<file alias="selectArrow.png">icons\darkmode\selectArrow.png</file>
 		<file alias="sortAZ.png">icons\darkmode\sortAZ.png</file>

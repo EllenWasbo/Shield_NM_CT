@@ -16,13 +16,13 @@ import shutil
 import webbrowser
 
 from PyQt5.QtGui import QIcon, QPixmap
-from PyQt5.QtCore import Qt, QTimer, QFile
+from PyQt5.QtCore import Qt, QTimer, QFile, QItemSelectionModel
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QSplitter,
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QGroupBox, QButtonGroup, QFormLayout,
     QScrollArea, QTabWidget, QTableWidget,
     QPushButton, QLabel, QLineEdit, QSpinBox, QDoubleSpinBox,
-    QRadioButton, QCheckBox, QComboBox,
+    QRadioButton, QCheckBox, QComboBox, QSlider, QToolButton,
     QMenu, QAction, QToolBar, QMessageBox, QFileDialog
     )
 import matplotlib.pyplot as plt
@@ -40,7 +40,7 @@ from Shield_NM_CT.config import config_func as cff
 from Shield_NM_CT.ui import messageboxes
 from Shield_NM_CT.ui import settings
 import Shield_NM_CT.ui.reusable_widgets as uir
-from Shield_NM_CT.ui.ui_dialogs import AboutDialog
+from Shield_NM_CT.ui.ui_dialogs import AboutDialog, EditAnnotationsDialog
 import Shield_NM_CT.resources
 # Shield_NM_CT block end
 
@@ -69,9 +69,10 @@ class GuiData():
     y1 = 0.0
     currentTab = 'Scale'
     wall_materials = ['Lead', 'Concrete']  #TODO from settings
-    annot_fontsize = 15
-    annot_line_thick = 3
-    annot_delta = (20, 20)
+    annotations = True
+    annotations_font_size = 15
+    annotations_line_thick = 3
+    annotations_delta = (20, 20)
     panel_width = 400
     panel_height = 700
     char_width = 7
@@ -98,8 +99,8 @@ class MainWindow(QMainWindow):
         self.gui.panel_width = round(0.48*scX)
         self.gui.panel_height = round(0.86*scY)
         self.gui.char_width = char_width
-        self.gui.annot_line_thick = self.user_prefs.annotations_line_thick
-        self.gui.annot_font_size = self.user_prefs.annotations_font_size
+        self.gui.annotations_line_thick = self.user_prefs.annotations_line_thick
+        self.gui.annotations_font_size = self.user_prefs.annotations_font_size
 
         self.occ_map = np.zeros(2)
         self.ct_dose_map = np.zeros(2)
@@ -122,8 +123,8 @@ class MainWindow(QMainWindow):
             self.default_floorplan = mpimg.imread(BytesIO(data))
 
         self.wFloorDisplay = FloorWidget(self)
-        self.wVisualization = VisualizationSettingsWidget(self)
-        self.wValues = ValuesWidget(self)
+        self.wVisualization = VisualizationWidget(self)
+        self.wCalculate = CalculateWidget(self)
 
         self.tabs = QTabWidget()
         self.tabs.currentChanged.connect(self.new_tab_selection)
@@ -178,7 +179,7 @@ class MainWindow(QMainWindow):
         wid_btm.setLayout(lo_btm)
         self.split_rgt.addWidget(wid_top)
         self.split_rgt.addWidget(wid_btm)
-        lo_top.addWidget(self.wValues)
+        lo_top.addWidget(self.wCalculate)
         lo_btm.addWidget(self.tabs)
 
         widFull = QWidget()
@@ -232,7 +233,7 @@ class MainWindow(QMainWindow):
 
     def update_dose_days(self):
         #TODO - number of working days changed - update dose if exists
-        #self.wValues.working_days.value()
+        #self.wCalculate.working_days.value()
         pass
 
     def exit_app(self):
@@ -266,7 +267,10 @@ class MainWindow(QMainWindow):
                                 'line_temp',
                                 'wall_selected',
                                 'source_selected']:
-                            self.wFloorDisplay.FloorCanvas.ax.lines[i].remove()
+                            try:
+                                self.wFloorDisplay.FloorCanvas.ax.lines[i].remove()
+                            except IndexError:
+                                pass
                 self.wFloorDisplay.FloorCanvas.draw()
 
     def load_floor_plan_image(self):
@@ -293,17 +297,14 @@ class MainWindow(QMainWindow):
         self.split_rgt.setSizes(
             [round(self.gui.panel_height*0.2), round(self.gui.panel_height*0.8)])
         self.split_lft_rgt.setSizes(
-            [round(self.gui.panel_width*1.), round(self.gui.panel_width*1.)])
+            [round(self.gui.panel_width*.8), round(self.gui.panel_width*1.2)])
 
     def set_split_max_img(self):
         """Set QSplitter to maximized image."""
         self.split_lft.setSizes(
             [round(self.gui.panel_height), 0])
-
-    def reset_split_max_img(self):
-        """Set QSplitter to maximized image."""
-        self.split_lft.setSizes(
-            [round(self.gui.panel_height*0.2), round(self.gui.panel_height*0.8)])
+        self.split_lft_rgt.setSizes(
+            [round(self.gui.panel_width*2), 0])
 
     def reset_all(self):
         """Reset all data and GUI."""
@@ -404,7 +405,7 @@ class MainWindow(QMainWindow):
         act_save_project.triggered.connect(self.save_project)
 
         act_save_project_as = QAction('Save project as...', self)
-        act_save_project_as.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}add.png'))
+        act_save_project_as.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}save_as.png'))
         act_save_project_as.setToolTip('Save project as...')
         act_save_project_as.triggered.connect(
             lambda: self.save_project(save_as=True))
@@ -625,16 +626,16 @@ class FloorCanvas(FigureCanvasQTAgg):
         if self.main.gui.scale_length > 0:
             if hasattr(self, 'scale_text'):
                 self.scale_text.set_position(
-                    [x0+self.main.gui.annot_delta[0],
-                     y0+self.main.gui.annot_delta[1]])
+                    [x0+self.main.gui.annotations_delta[0],
+                     y0+self.main.gui.annotations_delta[1]])
                 self.scale_text.set_text(
                     f'{self.main.gui.scale_length:.3f} m')
             else:
                 self.scale_text = self.ax.text(
-                    x0+self.main.gui.annot_delta[0],
-                    y0+self.main.gui.annot_delta[1],
+                    x0+self.main.gui.annotations_delta[0],
+                    y0+self.main.gui.annotations_delta[1],
                     f'{self.main.gui.scale_length:.3f} m',
-                    fontsize=self.main.gui.annot_fontsize, color='b')
+                    fontsize=self.main.gui.annotations_font_size, color='b')
             if hasattr(self, 'measured_text'):
                 self.measured_text.set_text('')
         self.draw()
@@ -651,15 +652,15 @@ class FloorCanvas(FigureCanvasQTAgg):
 
         if hasattr(self, 'measured_text'):
             self.measured_text.set_position(
-                [self.main.gui.x0+self.main.gui.annot_delta[0],
-                 self.main.gui.y0+self.main.gui.annot_delta[1]])
+                [self.main.gui.x0+self.main.gui.annotations_delta[0],
+                 self.main.gui.y0+self.main.gui.annotations_delta[1]])
             
             self.measured_text.set_text(lineTxt)
         else:
             self.measured_text = self.ax.text(
-                self.main.gui.x0+self.main.gui.annot_delta[0],
-                self.main.gui.y0+self.main.gui.annot_delta[1],
-                lineTxt, fontsize=self.main.gui.annot_fontsize, color='k')
+                self.main.gui.x0+self.main.gui.annotations_delta[0],
+                self.main.gui.y0+self.main.gui.annotations_delta[1],
+                lineTxt, fontsize=self.main.gui.annotations_font_size, color='k')
         self.draw()
 
     def add_sourcepos_highlight(self, x, y):
@@ -707,16 +708,57 @@ class FloorWidget(QWidget):
     def __init__(self, parent):
         super().__init__()
 
-        self.FloorCanvas = FloorCanvas(parent)
+        self.main = parent
+        self.FloorCanvas = FloorCanvas(self.main)
         tbimg = NavToolBar(self.FloorCanvas, self)
-        tbimg2 = InfoToolBar(self.FloorCanvas, parent)
+        tbimgPos = PositionToolBar(self.FloorCanvas, self.main)
+        tbimg.addWidget(tbimgPos)
+
+        act_edit_annotations = QAction(
+            QIcon(f'{os.environ[ENV_ICON_PATH]}edit.png'),
+            'Edit annotations', self)
+        act_edit_annotations.triggered.connect(self.edit_annotations)
+        self.tool_imgsize = QToolButton()
+        self.tool_imgsize.setToolTip('Maximize image')
+        self.tool_imgsize.setIcon(QIcon(
+            f'{os.environ[ENV_ICON_PATH]}layout_maximg.png'))
+        self.tool_imgsize.clicked.connect(self.clicked_imgsize)
+        self.tool_imgsize.setCheckable(True)
+        tbimg.addAction(act_edit_annotations)
+        tbimg.addWidget(self.tool_imgsize)
 
         vlo = QVBoxLayout()
         vlo.addWidget(tbimg)
-        vlo.addWidget(tbimg2)
+        #vlo.addWidget(tbimg2)
         vlo.addWidget(self.FloorCanvas)
         self.setLayout(vlo)
         self.FloorCanvas.floor_draw()
+
+    def edit_annotations(self):
+        """Pop up dialog to edit annotations settings."""
+        dlg = EditAnnotationsDialog(
+            annotations=self.main.gui.annotations,
+            annotations_line_thick=self.main.gui.annotations_line_thick,
+            annotations_font_size=self.main.gui.annotations_font_size)
+        res = dlg.exec()
+        if res:
+            ann, line_thick, font_size = dlg.get_data()
+            self.main.gui.annotations = ann
+            self.main.gui.annotations_line_thick = line_thick
+            self.main.gui.annotations_font_size = font_size
+            if self.main.gui.active_img_no > -1:
+                self.canvas.img_draw()
+
+    def clicked_imgsize(self):
+        """Maximize or reset image size."""
+        if self.tool_imgsize.isChecked():
+            self.tool_imgsize.setIcon(QIcon(
+                f'{os.environ[ENV_ICON_PATH]}layout_resetimg.png'))
+            self.main.set_split_max_img()
+        else:
+            self.tool_imgsize.setIcon(QIcon(
+                f'{os.environ[ENV_ICON_PATH]}layout_maximg.png'))
+            self.main.reset_split_sizes()
 
 
 class NavToolBar(NavigationToolbar2QT):
@@ -728,28 +770,21 @@ class NavToolBar(NavigationToolbar2QT):
             if x.text() in ['Back', 'Forward', 'Subplots', 'Customize']:
                 self.removeAction(x)
 
-    def set_message(self, s):
+    def set_message(self, event):
         """Hide cursor position and value text."""
         pass
 
 
-class InfoToolBar(QWidget):
-    """Toolbar for showing cursor position and values."""
+class PositionToolBar(QWidget):
+    """Toolbar for showing cursor position (x, y)."""
 
-    def __init__(self, canvas, window):
+    def __init__(self, canvas, main):
         super().__init__()
-        grid = QGridLayout()
-        self.main = window
-        self.setLayout(grid)
-        self.setFixedHeight(100)
+        self.main = main
+        hlo = QHBoxLayout()
+        self.setLayout(hlo)
         self.lbl_xypos = QLabel('')
-        self.lbl_occ = QLabel('')
-        self.lbl_dose_total = QLabel('')
-        grid.addWidget(self.lbl_xypos, 1, 1)
-        grid.addWidget(self.lbl_occ, 1, 2)
-        grid.addWidget(self.lbl_dose_total, 2, 1)
-        self.calibration_factor = window.gui.calibration_factor
-
+        hlo.addWidget(self.lbl_xypos)
         canvas.mpl_connect('motion_notify_event', self.on_move)
 
     def on_move(self, event):
@@ -758,16 +793,52 @@ class InfoToolBar(QWidget):
             xpos = round(event.xdata)
             ypos = round(event.ydata)
             self.lbl_xypos.setText(f'xy = ({xpos}, {ypos})')
+        else:
+            self.lbl_xypos.setText('')
+
+
+class InfoToolBar(QWidget):
+    """Toolbar for showing cursor position and values."""
+
+    def __init__(self, canvas, main):
+        super().__init__()
+        vlo = QVBoxLayout()
+        self.main = main
+        self.setLayout(vlo)
+        self.lbl_occ = QLabel('Occupancy factor =')
+        self.lbl_dose_total = QLabel('Total dose = xxxx mSv')
+        self.lbl_dose_nm = QLabel('NM dose = xxxx mSv')
+        self.lbl_doserate_nm = QLabel('NM doserate = xxxx ' + '\u03bc' + 'Sv/h')
+        self.lbl_dose_ct = QLabel('CT dose = xxxx mSv')
+        vlo.addWidget(self.lbl_occ)
+        vlo.addWidget(self.lbl_dose_total)
+        vlo.addWidget(self.lbl_dose_nm)
+        vlo.addWidget(self.lbl_doserate_nm)
+        vlo.addWidget(self.lbl_dose_ct)
+        #self.calibration_factor = self.main.gui.calibration_factor
+
+        canvas.mpl_connect('motion_notify_event', self.on_move)
+
+    def on_move(self, event):
+        """When mouse cursor is moving in the canvas."""
+        if event.inaxes and len(event.inaxes.get_images()) > 0:
+            xpos = round(event.xdata)
+            ypos = round(event.ydata)
             self.lbl_occ.setText(
                 f'Occupancy factor = {self.main.occ_map[ypos, xpos]:.2f}')
             self.lbl_dose_total.setText('Total dose = xxxx mSv')
+            self.lbl_dose_nm.setText('NM dose = xxxx mSv')
+            self.lbl_doserate_nm.setText('NM doserate = xxxx ' + '\u03bc' + 'Sv/h')
+            self.lbl_dose_ct.setText('CT dose = xxxx mSv')
         else:
-            self.lbl_xypos.setText('')
             self.lbl_occ.setText('')
             self.lbl_dose_total.setText('')
+            self.lbl_dose_nm.setText('')
+            self.lbl_doserate_nm.setText('')
+            self.lbl_dose_ct.setText('')
 
 
-class VisualizationSettingsWidget(QWidget):
+class VisualizationWidget(QWidget):
     """GUI for settings on how to visualize data."""
 
     def __init__(self, parent):
@@ -778,6 +849,7 @@ class VisualizationSettingsWidget(QWidget):
 
         self.gb_display = QGroupBox('Display...')
         self.gb_display.setFont(uir.FontItalic())
+        self.gb_display.setMinimumWidth(round(0.15*self.parent.gui.panel_width))
         self.btns_display = QButtonGroup()
         vlo = QVBoxLayout()
         for i, txt in enumerate([
@@ -788,6 +860,7 @@ class VisualizationSettingsWidget(QWidget):
                 'Sources']):
             chbx = QCheckBox(txt)
             self.btns_display.addButton(chbx, i)
+            chbx.setChecked(True)
             vlo.addWidget(chbx)
             chbx.clicked.connect(self.display_selections_changed)
         self.gb_display.setLayout(vlo)
@@ -795,6 +868,7 @@ class VisualizationSettingsWidget(QWidget):
 
         self.gb_overlay = QGroupBox('Color overlay...')
         self.gb_overlay.setFont(uir.FontItalic())
+        self.gb_overlay.setMinimumWidth(round(0.15*self.parent.gui.panel_width))
         self.btns_overlay = QButtonGroup()
         vlo = QVBoxLayout()
         for i, txt in enumerate([
@@ -802,14 +876,16 @@ class VisualizationSettingsWidget(QWidget):
                 'Dose',
                 'Max dose rate NM']):
             rbtn = QRadioButton(txt)
-            self.btns_display.addButton(rbtn, i)
+            self.btns_overlay.addButton(rbtn, i)
             vlo.addWidget(rbtn)
             rbtn.clicked.connect(self.overlay_selections_changed)
         self.gb_overlay.setLayout(vlo)
+        self.btns_overlay.button(0).setChecked(True)
         self.hlo.addWidget(self.gb_overlay)
 
         self.gb_dose = QGroupBox('Dose...')
         self.gb_dose.setFont(uir.FontItalic())
+        self.gb_dose.setMinimumWidth(round(0.15*self.parent.gui.panel_width))
         self.btns_dose = QButtonGroup()
         vlo = QVBoxLayout()
         for i, txt in enumerate([
@@ -822,7 +898,25 @@ class VisualizationSettingsWidget(QWidget):
             vlo.addWidget(rbtn)
             rbtn.clicked.connect(self.dose_selections_changed)
         self.gb_dose.setLayout(vlo)
+        self.btns_dose.button(0).setChecked(True)
         self.hlo.addWidget(self.gb_dose)
+
+        vlo_transparency = QVBoxLayout()
+        self.hlo.addLayout(vlo_transparency)
+        self.transparency = QSlider(Qt.Horizontal)
+        lbl_min = QLabel('0 %')
+        lbl_max = QLabel('100 %')
+        self.transparency.setRange(0, 100)
+        self.transparency.setValue(50)
+        self.transparency.sliderReleased.connect(
+            self.parent.wFloorDisplay.FloorCanvas.floor_draw)
+        vlo_transparency.addWidget(uir.LabelItalic('Transparency overlay'))
+        vlo_transparency.addWidget(self.transparency)
+        hlo_0_100 = QHBoxLayout()
+        vlo_transparency.addLayout(hlo_0_100)
+        hlo_0_100.addWidget(lbl_min)
+        hlo_0_100.addStretch()
+        hlo_0_100.addWidget(lbl_max)
 
     def display_selections_changed(self):
         """Update display when Display selections change."""
@@ -837,14 +931,41 @@ class VisualizationSettingsWidget(QWidget):
         pass  #TODO
 
 
-class ValuesWidget(QWidget):
-    """GUI for setting general values input for calculations."""
+class CalculateWidget(QWidget):
+    """GUI for calculation options."""
 
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
-        vlo = QHBoxLayout()
-        self.setLayout(vlo)
+        hlo = QHBoxLayout()
+        self.setLayout(hlo)
+        vlo_image_values = QVBoxLayout()
+        hlo.addLayout(vlo_image_values)
+        vlo_image_values.addWidget(uir.LabelHeader('Values at cursor position', 4))
+        info_tb = InfoToolBar(self.parent.wFloorDisplay.FloorCanvas, self.parent)
+        vlo_image_values.addWidget(info_tb)
+
+        hlo.addWidget(uir.VLine())
+        hlo.addSpacing(5)
+
+        vlo = QVBoxLayout()
+        hlo.addLayout(vlo)
+        vlo.addWidget(uir.LabelHeader("Calculate", 4))
+
+        self.gb_floor = QGroupBox('Calculate dose for floor...')
+        self.gb_floor.setFont(uir.FontItalic())
+        self.btns_floor = QButtonGroup()
+        vlo_gb = QVBoxLayout()
+        for i, txt in enumerate([
+                'Floor above',
+                'This floor',
+                'Floor below']):
+            rbtn = QRadioButton(txt)
+            self.btns_floor.addButton(rbtn, i)
+            vlo_gb.addWidget(rbtn)
+            rbtn.clicked.connect(self.parent.calculate_dose)
+        self.gb_floor.setLayout(vlo_gb)
+        self.btns_floor.button(1).setChecked(True)
 
         self.working_days = QSpinBox(minimum=0, maximum=1000,
                                      value=self.parent.general_values.working_days)
@@ -854,7 +975,28 @@ class ValuesWidget(QWidget):
         hlo_working_days.addWidget(QLabel('Sum dose (mSv) for '))
         hlo_working_days.addWidget(self.working_days)
         hlo_working_days.addWidget(QLabel(' working days'))
+        hlo_working_days.addStretch()
         vlo.addLayout(hlo_working_days)
+        self.chk_correct_thickness_geometry = QCheckBox(
+            'Correct geometrically for material thickness.')
+        hlo_correct = QHBoxLayout()
+        vlo.addLayout(hlo_correct)
+        hlo_correct.addWidget(self.chk_correct_thickness_geometry)
+        hlo_correct.addSpacing(2)
+        hlo_correct.addWidget(uir.InfoTool(
+            'Correct wall thickness geometrically as the rays actually have a longer '
+            'path through the material when oblique to the wall.<br>'
+            'NB might underestimate path length of scattered photons.<br>'
+            'These corrections are ignored for oblique walls.',
+            parent=self))
+
+        vlo.addSpacing(20)
+        btn_calculate = QPushButton('Calculate dose')
+        btn_calculate.toggled.connect(self.parent.calculate_dose)
+        hlo_calc = QHBoxLayout()
+        vlo.addLayout(hlo_calc)
+        hlo_calc.addWidget(self.gb_floor)
+        hlo_calc.addWidget(btn_calculate)
 
 
 class TableToolBar(QToolBar):
@@ -865,32 +1007,32 @@ class TableToolBar(QToolBar):
 
         self.setOrientation(Qt.Vertical)
 
-        actDelete = QAction('Delete', self)
-        actDelete.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}delete.png'))
-        actDelete.setToolTip('Delete selected row')
-        actDelete.triggered.connect(table.delete_row)
+        act_delete = QAction('Delete', self)
+        act_delete.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}delete.png'))
+        act_delete.setToolTip('Delete selected row')
+        act_delete.triggered.connect(table.delete_row)
 
-        actAdd = QAction('Add', self)
-        actAdd.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}add.png'))
-        actAdd.setToolTip('Add new row after selected row')
-        actAdd.triggered.connect(table.add_row)
+        act_add = QAction('Add', self)
+        act_add.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}add.png'))
+        act_add.setToolTip('Add new row after selected row')
+        act_add.triggered.connect(table.add_row)
 
-        actDuplicate = QAction('Duplicate', self)
-        actDuplicate.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}duplicate.png'))
-        actDuplicate.setToolTip('Duplicate')
-        actDuplicate.triggered.connect(table.duplicate_row)
+        act_duplicate = QAction('Duplicate', self)
+        act_duplicate.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}duplicate.png'))
+        act_duplicate.setToolTip('Duplicate')
+        act_duplicate.triggered.connect(table.duplicate_row)
 
-        actExport = QAction('Export CSV', self)
-        actExport.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}fileCSV.png'))
-        actExport.setToolTip('Export table to CSV')
-        actExport.triggered.connect(lambda: table.export_csv())
+        act_export = QAction('Export CSV', self)
+        act_export.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}fileCSV.png'))
+        act_export.setToolTip('Export table to CSV')
+        act_export.triggered.connect(lambda: table.export_csv())
 
-        actImport = QAction('Import CSV', self)
-        actImport.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}import.png'))
-        actImport.setToolTip('Import table from CSV')
-        actImport.triggered.connect(lambda: table.import_csv())
+        act_import = QAction('Import CSV', self)
+        act_import.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}import.png'))
+        act_import.setToolTip('Import table from CSV')
+        act_import.triggered.connect(lambda: table.import_csv())
 
-        self.addActions([actDelete, actAdd, actDuplicate, actExport, actImport])
+        self.addActions([act_delete, act_add, act_duplicate, act_export, act_import])
 
 
 class TextCell(QLineEdit):
@@ -978,16 +1120,17 @@ class InputTab(QWidget):
 
         self.vlo = QVBoxLayout()
         self.setLayout(self.vlo)
-        self.vlo.addWidget(QLabel(f"""<html><body>
-                             <h3><i>{header}</i></h3>
-                             </font></body></html>"""))
-        if info != '':
-            self.vlo.addWidget(QLabel(f"""<html><body><p><i>{info}
-                                      </i></p></body></html>"""))
-        self.btn_get_pos = QPushButton(f'{btn_get_pos_text}')
-        self.btn_get_pos.setStyleSheet('background-color: skyblue;')
+        self.vlo.addWidget(uir.LabelHeader(header, 4))
+        self.btn_get_pos = QPushButton(f'   {btn_get_pos_text}   ')
+        self.btn_get_pos.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}selectArrow.png'))
+        self.btn_get_pos.setStyleSheet('border-color: #6e94c0; border-width: 4px;')
         hlo_push = QHBoxLayout()
+        self.hlo_extra = QHBoxLayout()  # for additional widgets before info
         hlo_push.addWidget(self.btn_get_pos)
+        hlo_push.addLayout(self.hlo_extra)
+        if info != '':
+            hlo_push.addSpacing(20)
+            hlo_push.addWidget(uir.InfoTool(info, parent=self))
         hlo_push.addStretch()
         self.vlo.addLayout(hlo_push)
         self.btn_get_pos.clicked.connect(self.get_pos)
@@ -1006,6 +1149,12 @@ class InputTab(QWidget):
         self.hlo.addWidget(self.tb)
         self.hlo.addWidget(self.table)
 
+    def select_row_col(self, row, col):
+        """Set focus on selected row and col."""
+        index = self.table.model().index(row, col)
+        self.table.selectionModel().select(
+            index, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
+
     def get_row_col(self):
         """Get selected row in table."""
         row = -1
@@ -1015,6 +1164,11 @@ class InputTab(QWidget):
                 if self.table.cellWidget(i, j) == self.table.focusWidget():
                     row = i
                     col = j
+        if row == -1:  # if no focusWidget, try selected row
+            sel = self.table.selectedIndexes()
+            if len(sel) > 0:
+                row = sel[0].row()
+                col = sel[0].column()
 
         return (row, col)
 
@@ -1059,6 +1213,7 @@ class InputTab(QWidget):
             newrow = row + 1
         self.table.insertRow(newrow)
         self.table_list.insert(newrow, copy.deepcopy(self.empty_row))
+        self.select_row_col(newrow, 1)
         return newrow
 
     def get_cell_value(self, row, col):
@@ -1188,12 +1343,12 @@ class ScaleTab(InputTab):
             info=(
                 'Draw line of known length in floor plan'
                 ' (click, drag, release).<br>'
-                'Press button below to fetch the positions of the line.<br>'
+                'Press the "Get..."-button to fetch the positions of the line.<br>'
                 'Set the actual length of this line to calibrate'
                 ' the scale of the floor plan.'
                 ),
-            btn_get_pos_text='Get scale as marked in image')
-        
+            btn_get_pos_text='Get scale coordinates as marked in image')
+
         self.c0 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
         self.c0.editingFinished.connect(lambda: self.parent.reset_dose(floor=0))
         self.c1 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
@@ -1228,14 +1383,12 @@ class ScaleTab(InputTab):
         self.table_list.append(copy.deepcopy(self.empty_row))
         self.active_row = 0
         self.table.verticalHeader().setVisible(False)
-        self.table.setColumnWidth(0, 20*self.parent.gui.char_width)
-        self.table.setColumnWidth(1, 20*self.parent.gui.char_width)
+        self.table.setColumnWidth(0, 40*self.parent.gui.char_width)
+        self.table.setColumnWidth(1, 25*self.parent.gui.char_width)
         self.add_cell_widgets(0)
-        self.table.setMinimumHeight(200)
+        self.table.setMinimumHeight(100)
 
-        self.vlo.addWidget(QLabel(f"""<html><body>
-                             <h3><i>Floor heights</i></h3>
-                             </font></body></html>"""))
+        self.vlo.addWidget(uir.LabelHeader('Floor heights', 4))
         hlo_heights = QHBoxLayout()
         self.vlo.addLayout(hlo_heights)
         img_lbl = QLabel()
@@ -1404,6 +1557,14 @@ class AreasTab(InputTab):
     def __init__(self, parent):
         super().__init__(
             header='Areas - for occupancy factors',
+            info=(
+                'Mark areas to set the occupancy factor other than default 1.0.<br>'
+                'Mark an area in the floor plan'
+                ' (click, drag, release).<br>'
+                'Select the row for which you want to set this area.<br>'
+                'Press the "Get..."-button to fetch the positions of the area.<br>'
+                'Set the occupancy factor for the area.'
+                ),
             btn_get_pos_text='Get area as marked in image')
 
         self.label = 'Areas'
@@ -1414,9 +1575,13 @@ class AreasTab(InputTab):
         self.empty_row = [True, '', '', 1.]
         self.table_list.append(copy.deepcopy(self.empty_row))
         self.active_row = 0
-        self.table.setColumnWidth(0, 50)
+        self.table.setColumnWidth(0, 10*self.parent.gui.char_width)
+        self.table.setColumnWidth(1, 30*self.parent.gui.char_width)
+        self.table.setColumnWidth(2, 30*self.parent.gui.char_width)
+        self.table.setColumnWidth(3, 30*self.parent.gui.char_width)
         self.table.verticalHeader().setVisible(False)
         self.add_cell_widgets(0)
+        self.select_row_col(0, 1)
 
     def add_cell_widgets(self, row):
         """Add cell widgets to the selected row (new row, default values)."""
@@ -1541,6 +1706,7 @@ class AreasTab(InputTab):
             for i in range(self.table.columnCount()):
                 self.table.cellWidget(addedRow, i).blockSignals(False)
 
+            self.select_row_col(addedRow, 1)
             self.table_list[addedRow] = copy.deepcopy(values_above)
 
 
@@ -1550,7 +1716,20 @@ class WallsTab(InputTab):
     def __init__(self, parent):
         super().__init__(
             header='Walls',
-            btn_get_pos_text='Get wall position as marked in image')
+            info=(
+                'Draw a line for a shielded wall in the floor plan'
+                ' (click, drag, release).<br>'
+                'Select the row for which you want to set these positions.<br>'
+                'Press the "Get..."-button to fetch the positions of the line.<br>'
+                'Define shielding material and thickness.<br>'
+                'The "Rectify" option (default on) will automatically adjust the wall '
+                'coordinates to horizontal or vertical when added.<br>'
+                'To keep the wall oblique, deselect "Rectify".'
+                ),
+            btn_get_pos_text='Get wall coordinates as marked in image')
+        self.rectify = QCheckBox("Rectify")
+        self.rectify.setChecked(True)
+        self.hlo_extra.addWidget(self.rectify)
 
         self.label = 'Walls'
         self.parent = parent
@@ -1561,9 +1740,14 @@ class WallsTab(InputTab):
         self.material_strings = [x.label for x in self.parent.materials]
         self.table_list.append(copy.deepcopy(self.empty_row))
         self.active_row = 0
-        self.table.setColumnWidth(0, 50)
+        self.table.setColumnWidth(0, 10*self.parent.gui.char_width)
+        self.table.setColumnWidth(1, 30*self.parent.gui.char_width)
+        self.table.setColumnWidth(2, 30*self.parent.gui.char_width)
+        self.table.setColumnWidth(3, 30*self.parent.gui.char_width)
+        self.table.setColumnWidth(4, 30*self.parent.gui.char_width)
         self.table.verticalHeader().setVisible(False)
         self.add_cell_widgets(0)
+        self.select_row_col(0, 1)
 
     def add_cell_widgets(self, row):
         """Add cell widgets to the selected row (new row, default values)."""
@@ -1701,7 +1885,7 @@ class WallsTab(InputTab):
 
             for i in range(self.table.columnCount()):
                 self.table.cellWidget(addedRow, i).blockSignals(False)
-
+            self.select_row_col(addedRow, 1)
             self.table_list[addedRow] = copy.deepcopy(values_above)
 
 
@@ -1712,13 +1896,19 @@ class NMsourcesTab(InputTab):
         super().__init__(
             header='NM sources - radioactive sources',
             info=(
-                'A0 = activity at start (t0)<br>'
-                't1 = when activity reaches this position (hours after t0)<br>'
-                'duration = duration of activity at this position (hours)<br>'
-                'Rest void = rest fraction after voiding<br>'
-                '# pr workday = number of procedures pr working day'
+                'Select position of source in floor plan (mouse click).<br>'
+                'Select the row for which you want to set this source position.<br>'
+                'Press the "Get..."-button to fetch the coordinates.<br>'
+                '<br>'
+                'Specify parameters for the sources:<br>'
+                '   - A0 = activity at start (t0)<br>'
+                '   - t1 = when activity reaches this position (hours after t0)<br>'
+                '   - duration = duration of activity at this position (hours)<br>'
+                '   - Rest void = rest fraction after voiding<br>'
+                '   - # pr workday = number of procedures pr working day. '
+                'Dose multiplied with number of working days specified above.'
                 ),
-            btn_get_pos_text='Get source position as marked in image')
+            btn_get_pos_text='Get source coordinates as marked in image')
 
         self.label = 'NMsources'
         self.parent = parent
@@ -1732,17 +1922,20 @@ class NMsourcesTab(InputTab):
         self.isotope_strings = [x.label for x in self.parent.isotopes]
         self.table_list.append(copy.deepcopy(self.empty_row))
         self.active_row = 0
-        self.table.setColumnWidth(0, 50)
-        self.table.setColumnWidth(3, 70)
-        self.table.setColumnWidth(4, 55)
-        self.table.setColumnWidth(5, 60)
-        self.table.setColumnWidth(6, 60)
-        self.table.setColumnWidth(7, 90)
-        self.table.setColumnWidth(8, 70)
-        self.table.setColumnWidth(9, 70)
+        self.table.setColumnWidth(0, 10*self.parent.gui.char_width)
+        self.table.setColumnWidth(1, 25*self.parent.gui.char_width)
+        self.table.setColumnWidth(2, 15*self.parent.gui.char_width)
+        self.table.setColumnWidth(3, 13*self.parent.gui.char_width)
+        self.table.setColumnWidth(4, 13*self.parent.gui.char_width)
+        self.table.setColumnWidth(5, 13*self.parent.gui.char_width)
+        self.table.setColumnWidth(6, 13*self.parent.gui.char_width)
+        self.table.setColumnWidth(7, 17*self.parent.gui.char_width)
+        self.table.setColumnWidth(8, 13*self.parent.gui.char_width)
+        self.table.setColumnWidth(9, 15*self.parent.gui.char_width)
 
         self.table.verticalHeader().setVisible(False)
         self.add_cell_widgets(0)
+        self.select_row_col(0, 1)
 
     def add_cell_widgets(self, row):
         """Add cell widgets to the selected row (new row, default values)."""
@@ -1851,7 +2044,7 @@ class NMsourcesTab(InputTab):
 
             for i in range(self.table.columnCount()):
                 self.table.cellWidget(addedRow, i).blockSignals(False)
-
+            self.select_row_col(addedRow, 1)
             self.table_list[addedRow] = copy.deepcopy(values_above)
             # TODO: change label to one not used yet
             # TODO: update floor display
