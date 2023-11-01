@@ -42,9 +42,9 @@ class GeneralValues:
     h0: float = 4.0
     h1: float = 4.0
     shield_mm_above: float = 200.0
-    shield_material_above: str = 'concrete'
+    shield_material_above: str = 'Concrete'
     shield_mm_below: float = 200.0
-    shield_material_below: str = 'concrete'
+    shield_material_below: str = 'Concrete'
 
 
 @dataclass

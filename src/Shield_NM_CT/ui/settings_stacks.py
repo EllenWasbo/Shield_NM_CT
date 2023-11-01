@@ -106,7 +106,7 @@ class MaterialWidget(StackWidget):
         self.fname = 'materials'
         self.empty_template = cfc.Material()
 
-        self.desciption = QLineEdit()
+        self.description = QLineEdit()
         self.description.editingFinished.connect(lambda: self.flag_edit(True))
 
         self.wid_temp = QWidget(self)

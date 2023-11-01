@@ -1195,21 +1195,28 @@ class ScaleTab(InputTab):
             btn_get_pos_text='Get scale as marked in image')
         
         self.c0 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
-        self.c0.editingFinished.connect(lambda: self.reset_dose(floor=0))
+        self.c0.editingFinished.connect(lambda: self.parent.reset_dose(floor=0))
         self.c1 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
-        self.c1.editingFinished.connect(lambda: self.reset_dose(floor=1))
+        self.c1.editingFinished.connect(lambda: self.parent.reset_dose(floor=1))
         self.c2 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
-        self.c2.editingFinished.connect(lambda: self.reset_dose(floor=2))
+        self.c2.editingFinished.connect(lambda: self.parent.reset_dose(floor=2))
         self.h0 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
-        self.h0.editingFinished.connect(lambda: self.reset_dose(floor=1))
+        self.h0.editingFinished.connect(lambda: self.parent.reset_dose(floor=1))
         self.h1 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
-        self.h1.editingFinished.connect(lambda: self.reset_dose(floor=2))
+        self.h1.editingFinished.connect(lambda: self.parent.reset_dose(floor=2))
 
         self.shield_mm_above = QDoubleSpinBox(minimum=0, maximum=500, decimals=1)
-        self.shield_mm_above.editingFinished.connect(lambda: self.reset_dose(floor=2))
+        self.shield_mm_above.editingFinished.connect(
+            lambda: self.parent.reset_dose(floor=2))
         self.shield_material_above = QComboBox()
         self.shield_material_above.currentTextChanged.connect(
-            lambda: self.reset_dose(floor=2))
+            lambda: self.parent.reset_dose(floor=2))
+        self.shield_mm_below = QDoubleSpinBox(minimum=0, maximum=500, decimals=1)
+        self.shield_mm_below.editingFinished.connect(
+            lambda: self.parent.reset_dose(floor=0))
+        self.shield_material_below = QComboBox()
+        self.shield_material_below.currentTextChanged.connect(
+            lambda: self.parent.reset_dose(floor=0))
 
         self.label = 'Scale'
         self.parent = parent
@@ -1259,7 +1266,7 @@ class ScaleTab(InputTab):
         self.vlo.addStretch()
 
         self.update_heights()
-        self.update_material_lists()
+        self.update_material_lists(first=True)
 
     def add_cell_widgets(self, row):
         """Add cell widgets to the selected row (new row, default values)."""
@@ -1338,25 +1345,32 @@ class ScaleTab(InputTab):
         self.shield_mm_below.setValue(self.parent.general_values.shield_mm_below)
         self.blockSignals(False)
 
-    def update_material_lists(self):
+    def update_material_lists(self, first=False):
         """Update selectable lists."""
         self.material_strings = [x.label for x in self.parent.materials]
-        prev_above = self.shield_material_above.text()
-        prev_below = self.shield_material_below.text()
+        if first:
+            prev_above = self.parent.general_values.shield_material_above
+            prev_below = self.parent.general_values.shield_material_below
+        else:
+            prev_above = self.shield_material_above.currentText()
+            prev_below = self.shield_material_below.currentText()
         warnings = []
         self.blockSignals(True)
         self.shield_material_above.clear()
         self.shield_material_above.addItems(self.material_strings)
         if prev_above in self.material_strings:
-            self.shield_material_above.setText(prev_above)
+            self.shield_material_above.setCurrentText(prev_above)
         else:
-            warnings.append(f'Shield material of floor above {prev_above} no longer '
+            self.shield_material_above.setCurrentText(self.material_strings[0])
+            warnings.append(f'Shield material of floor above ({prev_above}) no longer '
                             'available. Please control selected material.')
         self.shield_material_below.clear()
         self.shield_material_below.addItems(self.material_strings)
         if prev_below in self.material_strings:
-            self.shield_material_below.setText(prev_below)
-            warnings.append(f'Shield material of floor below {prev_below} no longer '
+            self.shield_material_below.setCurrentText(prev_below)
+        else:
+            self.shield_material_below.setCurrentText(self.material_strings[0])
+            warnings.append(f'Shield material of floor below ({prev_below}) no longer '
                             'available. Please control selected material.')
         self.blockSignals(False)
         if warnings:
@@ -1573,8 +1587,10 @@ class WallsTab(InputTab):
             if prev_val in self.material_strings:
                 w.setText(prev_val)
             else:
-                warnings.append(f'Material {prev_val} no longer available. '
-                                'Please control material of walls row number {row}.')
+                if prev_val is not None:
+                    warnings.append(
+                        f'Material ({prev_val}) no longer available. '
+                        f'Please control material of walls row number {row}.')
         self.blockSignals(False)
         if warnings:
             dlg = messageboxes.MessageBoxWithDetails(
