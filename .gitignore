@@ -1,0 +1,25 @@
+# Windows
+Thumbs.db
+
+*.pyc
+__pycache__/
+.pytest_cache/
+.pylintrc
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+*.egg*
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+.installed.cfg
+MANIFEST
+
