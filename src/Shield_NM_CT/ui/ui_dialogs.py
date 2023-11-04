@@ -280,9 +280,10 @@ class HeightsDialog(ShieldDialog):
 class EditAnnotationsDialog(ShieldDialog):
     """Dialog to set annotation settings."""
 
-    def __init__(self, annotations=True, annotations_line_thick=0,
-                 annotations_font_size=0):
+    def __init__(self, annotations=True, annotations_linethick=0,
+                 annotations_fontsize=0, canvas=None):
         super().__init__()
+        self.canvas = canvas
 
         self.setWindowTitle('Set annotations')
         self.setMinimumHeight(300)
@@ -299,12 +300,20 @@ class EditAnnotationsDialog(ShieldDialog):
 
         self.spin_line = QSpinBox()
         self.spin_line.setRange(1, 10)
-        self.spin_line.setValue(annotations_line_thick)
+        self.spin_line.setValue(annotations_linethick)
+        if self.canvas:
+            self.spin_line.valueChanged.connect(
+                lambda: self.canvas.update_annotations_linethick(self.spin_line.value())
+                )
         fLO.addRow(QLabel('Line thickness'), self.spin_line)
 
         self.spin_font = QSpinBox()
         self.spin_font.setRange(5, 100)
-        self.spin_font.setValue(annotations_font_size)
+        self.spin_font.setValue(annotations_fontsize)
+        if self.canvas:
+            self.spin_font.valueChanged.connect(
+                lambda: self.canvas.update_annotations_fontsize(self.spin_font.value())
+                )
         fLO.addRow(QLabel('Font size'), self.spin_font)
 
         buttons = QDialogButtonBox.Ok | QDialogButtonBox.Cancel
@@ -321,9 +330,9 @@ class EditAnnotationsDialog(ShieldDialog):
         bool
             annotations
         int
-            line_thick
+            linethick
         int
-            font_size
+            fontsize
         """
         return (
             self.chk_annotations.isChecked(),

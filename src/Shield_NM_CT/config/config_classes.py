@@ -16,9 +16,9 @@ class UserPreferences:
     config_folder: str = ''
     default_path: str = ''
     dark_mode: bool = False
-    font_size: int = 9
-    annotations_line_thick: int = 1
-    annotations_font_size: int = 10
+    fontsize: int = 9
+    annotations_linethick: int = 1
+    annotations_fontsize: int = 10
 
 
 @dataclass

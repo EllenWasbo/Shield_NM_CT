@@ -130,7 +130,7 @@ if __name__ == '__main__':
             {pressed_background}
             }}""")
     myFont = QFont()
-    myFont.setPointSize(user_prefs.font_size)
+    myFont.setPointSize(user_prefs.fontsize)
     app.setFont(myFont)
     font_metric = QFontMetrics(myFont)
     char_width = font_metric.averageCharWidth()

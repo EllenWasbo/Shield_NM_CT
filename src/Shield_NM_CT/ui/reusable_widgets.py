@@ -12,7 +12,7 @@ from PyQt5.QtGui import QIcon, QFont
 from PyQt5.QtWidgets import (
     qApp, QWidget, QDialog, QDialogButtonBox, QVBoxLayout, QHBoxLayout, QFrame,
     QToolBar, QAction, QComboBox, QRadioButton, QButtonGroup, QToolButton,
-    QLabel, QPushButton, QListWidget, QLineEdit, QCheckBox,
+    QLabel, QPushButton, QListWidget, QLineEdit, QCheckBox, QDoubleSpinBox,
     QProgressDialog, QProgressBar, QStatusBar
     )
 
@@ -626,3 +626,91 @@ class StatusLabel(QWidget):
             "QWidget{background-color:" + self.default_color + ";}")
         self.message.setText('')
         qApp.processEvents()
+
+
+class TextCell(QLineEdit):
+    """Text inputs as QLineEdit to trigger action on input changes."""
+
+    def __init__(self, parent, initial_text='', row=-1, col=-1):
+        super().__init__(initial_text)
+        self.parent = parent
+        self.textEdited.connect(lambda: self.parent.cell_changed(self.row, self.col))
+        self.row = row
+        self.col = col
+
+    def focusInEvent(self, event):
+        self.parent.cell_selection_changed(self.row, self.col)
+        super().focusInEvent(event)
+
+
+class CellSpinBox(QDoubleSpinBox):
+    """Spinbox for cell widgets. Default is ratio 0.-1."""
+
+    def __init__(self, parent,
+                 initial_value=0., row=-1, col=-1,
+                 min_val=0., max_val=1.,
+                 step=0.05, decimals=2):
+        """Initialize CellSpinBox.
+
+        Parameters
+        ----------
+        parent : InputTab
+        initial_value : float, optional
+            Initial value. The default is 0..
+        min_val : float, optional
+            Minumum value. The default is 0..
+        max_val : float, optional
+            Maximum value. The default is 1..
+        step : float, optional
+            Single step when using arrows. The default is 0.05.
+        decimals : int, optional
+            Number of decimals. The default is 2.
+        """
+        super().__init__()
+        self.parent = parent
+        self.row = row
+        self.col = col
+        self.setRange(min_val, max_val)
+        self.setSingleStep(step)
+        self.setDecimals(decimals)
+        self.setValue(initial_value)
+        self.valueChanged.connect(
+            lambda: self.parent.cell_changed(self.row, self.col))
+
+    def focusInEvent(self, event):
+        self.parent.cell_selection_changed(self.row, self.col)
+        super().focusInEvent(event)
+
+
+class InputCheckBox(QCheckBox):
+    """Checkbox with left margin for InputTab."""
+
+    def __init__(self, parent, initial_value=True, row=-1, col=-1):
+        super().__init__()
+        self.parent = parent
+        self.row = row
+        self.col = col
+        self.setStyleSheet("QCheckBox { padding-left: 15px }")
+        self.setChecked(initial_value)
+        self.toggled.connect(lambda: self.parent.cell_changed(self.row, self.col))
+
+    def focusInEvent(self, event):
+        self.parent.cell_selection_changed(self.row, self.col)
+        super().focusInEvent(event)
+
+
+class CellCombo(QComboBox):
+    """Checkbox with left margin for InputTab."""
+
+    def __init__(self, parent, strings, row=-1, col=-1):
+        super().__init__()
+        self.parent = parent
+        self.row = row
+        self.col = col
+        self.addItems(strings)
+        self.currentIndexChanged.connect(
+            lambda: self.parent.cell_changed(self.row, self.col))
+
+    def focusInEvent(self, event):
+        self.parent.cell_selection_changed(self.row, self.col)
+        super().focusInEvent(event)
