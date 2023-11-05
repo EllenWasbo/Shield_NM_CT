@@ -63,11 +63,12 @@ class GuiData():
     x1 = 0.0  # mouse x coordinate on_motion (if already pressed) and on_release
     y0 = 0.0  # same as above for y coordinate
     y1 = 0.0
-    currentTab = 'Scale'
+    current_tab = 'Scale'
     annotations = True
     annotations_fontsize = 15
     annotations_linethick = 3
     annotations_delta = (20, 20)
+    handle_size = 10
     alpha_image = 1.0
     alpha_overlay = 0.5
     panel_width = 400
@@ -238,8 +239,9 @@ class MainWindow(QMainWindow):
                 pass
             self.ct_dose_map = np.zeros(self.image.shape[0:2], dtype=float)
 
-    def reset_dose(self, floor=2):
-        #TODO reset if current floor is floor
+    def reset_dose(self, floor=None):
+        #TODO reset if floor = None, else reset if current floor is floor
+        #also reset NM dose
         pass
 
     def calculate_dose(self):
@@ -256,15 +258,17 @@ class MainWindow(QMainWindow):
             if event.key() == Qt.Key_Return:
                 self.tabs.currentWidget().get_pos()
             elif event.key() == Qt.Key_Plus:
-                try:
-                    self.tabs.currentWidget().add_row()
-                except AttributeError:
-                    pass
+                if self.tabs.currentWidget().cellwidget_is_text is False:
+                    try:
+                        self.tabs.currentWidget().add_row()
+                    except AttributeError:
+                        pass
             elif event.key() == Qt.Key_Delete:
-                try:
-                    self.tabs.currentWidget().delete_row()
-                except AttributeError:
-                    pass
+                if self.tabs.currentWidget().cellwidget_is_text is False:
+                    try:
+                        self.tabs.currentWidget().delete_row()
+                    except AttributeError:
+                        pass
 
 
     def exit_app(self):
@@ -284,7 +288,7 @@ class MainWindow(QMainWindow):
     def new_tab_selection(self, i):
         """Remove temporary, tab-specific annotations + more settings."""
         if hasattr(self.tabs.currentWidget(), 'label'):
-            self.gui.currentTab = self.tabs.currentWidget().label
+            self.gui.current_tab = self.tabs.currentWidget().label
             if hasattr(self.wFloorDisplay.canvas, 'ax'):
                 if len(self.wFloorDisplay.canvas.ax.patches) > 0:
                     for i, p in enumerate(
@@ -304,13 +308,15 @@ class MainWindow(QMainWindow):
                             except IndexError:
                                 pass
                 self.blockSignals(True)
-                if self.gui.currentTab in ANNOTATION_OPTIONS:
+                if self.gui.current_tab in ANNOTATION_OPTIONS:
                     self.wVisual.btns_annotate.button(
-                        ANNOTATION_OPTIONS.index(self.gui.currentTab)).setChecked(True)
-                if self.gui.currentTab == 'Areas':
+                        ANNOTATION_OPTIONS.index(self.gui.current_tab)).setChecked(True)
+                if self.gui.current_tab == 'Areas':
                     self.wVisual.set_alpha_overlay(0.2)
                     self.wVisual.btns_overlay.button(1).setChecked(True)
                     self.areas_tab.update_occ_map()
+                else:  #TODO more options if dose
+                    self.wVisual.btns_overlay.button(0).setChecked(True)
                 self.blockSignals(False)
                 self.wFloorDisplay.canvas.draw()
 
@@ -347,10 +353,15 @@ class MainWindow(QMainWindow):
         self.gui = GuiData()
         self.occ_map = np.zeros(2)
         self.ct_dose_map = np.zeros(2)
-        self.areas_tab.table.setRowCount(0)
-        self.areas_tab.add_cell_widgets(0)
-        self.areas_tab.table_list.append(
-            copy.deepcopy(self.areas_tab.empty_row))
+        for widget in [
+                self.areas_tab,
+                self.walls_tab,
+                self.NMsources_tab]: #TODO increase list
+            widget.table.setRowCount(0)
+            widget.add_cell_widgets(0)
+            widget.table_list = [copy.deepcopy(self.areas_tab.empty_row)]
+        #TODO reset scale?
+        #TODO reset floor heights?
         self.wFloorDisplay.canvas.floor_draw()
 
     def open_project(self):
@@ -498,15 +509,31 @@ class FloorCanvas(FigureCanvasQTAgg):
         self.setParent(main)
 
         self.font = {
-            'family': 'serif',
-            'color': 'darkred',
-            'weight': 'normal',
-            'size': 16
-        }
+            'family': 'serif', 'color': 'darkred', 'weight': 'normal', 'size': 16}
+
         self.area_temp = Rectangle((0, 0), 1, 1)
         self.area_highlight = Rectangle((0, 0), 1, 1)
         self.current_artist = None  # picked artist
+        self.hovered_artist = None  # artist detected on hover
         self.mouse_pressed = False
+        self.info_text = None
+        self.handles_activated = False  # True if handles for editing shown
+        self.drag_handle = False  # True if handles for editing by drag picked
+        # INFO gid used for different artists:
+        '''
+        'line_temp':	 dotted line for marked new line
+        'scale': line for currently defined scale (line)
+        'scale_text': text for currently defined length of scale line
+        'measured_text': text for length of line_temp if scale set
+        'area_temp': dotted Rectangle for marked area
+        'area_highlight': red dottet Rectangle for selected row in Areas table
+        'wall_selected':	
+        'source_selected':
+        'point_release'
+        '{int}': row number in table for current tab
+        'handle_?': pickable Rectangle to drag position of line (_start, _end)
+                        or of area (_left, _right, _top, _bottom)
+        '''
 
         self.mpl_connect("button_press_event", self.on_press)
         self.mpl_connect("button_release_event", self.on_release)
@@ -520,18 +547,17 @@ class FloorCanvas(FigureCanvasQTAgg):
             self.main.gui.x0, self.main.gui.y0 = event.xdata, event.ydata
             self.main.gui.x1, self.main.gui.y1 = event.xdata, event.ydata
 
-            if self.main.gui.currentTab == 'Areas':
-                self.area_temp = Rectangle((0, 0), 1, 1,
-                                           edgecolor='k', linestyle='--',
-                                           linewidth=2., fill=False,
-                                           gid='area_temp')
+            if self.main.gui.current_tab == 'Areas':
+                self.area_temp = Rectangle(
+                    (0, 0), 1, 1, edgecolor='k', linestyle='--',
+                    linewidth=2., fill=False, gid='area_temp')
                 if len(self.ax.patches) > 0:
                     for i, p in enumerate(self.ax.patches):
                         if p.get_gid() == 'area_temp':
                             self.ax.patches[i].remove()
                 self.ax.add_patch(self.area_temp)
                 self.draw()
-            elif self.main.gui.currentTab in ['Scale', 'Walls']:
+            elif self.main.gui.current_tab in ['Scale', 'Walls']:
                 if len(self.ax.lines) > 0:
                     for i, p in enumerate(self.ax.lines):
                         if p.get_gid() == 'line_temp':
@@ -547,26 +573,54 @@ class FloorCanvas(FigureCanvasQTAgg):
         if self.mouse_pressed:
             if self.main.gui.x0 is not None:
                 self.main.gui.x1, self.main.gui.y1 = event.xdata, event.ydata
-                if self.main.gui.currentTab == 'Areas':
-                    width = np.abs(self.main.gui.x1 - self.main.gui.x0)
-                    height = np.abs(self.main.gui.y1 - self.main.gui.y0)
-                    self.area_temp.set_width(width)
-                    self.area_temp.set_height(height)
-                    self.area_temp.set_xy((
-                        min(self.main.gui.x0, self.main.gui.x1),
-                        min(self.main.gui.y0, self.main.gui.y1)))
-
-                elif self.main.gui.currentTab in ['Scale', 'Walls']:
+                if self.main.gui.current_tab == 'Areas':
+                    self.update_area_on_drag()
+                elif self.main.gui.current_tab in ['Scale', 'Walls']:
                     for p in self.ax.lines:
                         if p.get_gid() == 'line_temp':
                             p.set_data(
                                 [self.main.gui.x0, self.main.gui.x1],
                                 [self.main.gui.y0, self.main.gui.y1])
                             break
-                    if self.main.gui.currentTab == 'Scale':
+                    if self.main.gui.current_tab == 'Scale':
                         self.add_measured_length()
 
-                self.draw()
+                    self.draw_idle()
+        else:  # on hover - make thicker + annotate with info_text
+            if self.handles_activated == False and event.inaxes == self.ax:
+                prev_hovered_artist = self.hovered_artist
+                hit = False
+                if self.main.gui.current_tab == 'Areas':
+                    for patch in self.ax.patches:
+                        contain_event, index = patch.contains(event)
+                        gid = patch.get_gid()
+                        if contain_event and 'handle' not in gid:
+                            self.hovered_artist = patch
+                            hit = True
+                    if hit is False:
+                        self.hovered_artist = None
+                else:
+                    for line in self.ax.lines:
+                        contain_event, index = line.contains(event)
+                        if contain_event:
+                            self.hovered_artist = line
+                            hit = True
+                    if hit is False:
+                        self.hovered_artist = None
+
+                if prev_hovered_artist != self.hovered_artist:  # redraw
+                    if prev_hovered_artist != None:  # reset linethickness
+                        prev_hovered_artist.set_linewidth(
+                            self.main.gui.annotations_linethick)
+                        self.draw_idle()
+                    if self.hovered_artist is None:
+                        self.info_text.set_visible(False)
+                        self.draw_idle()
+                    else:
+                        self.hovered_artist.set_linewidth(
+                            self.main.gui.annotations_linethick + 2)
+                        self.update_info_text(event)
+                        self.draw_idle()
 
     def on_release(self, event):
         """When mouse button released."""
@@ -580,20 +634,24 @@ class FloorCanvas(FigureCanvasQTAgg):
         else:
             width = 0
             height = 0
-        if (width + height) > 20:
-            if self.main.gui.currentTab == 'Areas':
-                self.area_temp.set_width(width)
-                self.area_temp.set_height(height)
-                self.area_temp.set_xy((
-                    min(self.main.gui.x0, self.main.gui.x1),
-                    min(self.main.gui.y0, self.main.gui.y1)))
-            elif self.main.gui.currentTab in ['Scale', 'Walls']:
-                for p in self.ax.lines:
-                    if p.get_gid() == 'line_temp':
-                        p.set_data(
-                            [self.main.gui.x0, self.main.gui.x1],
-                            [self.main.gui.y0, self.main.gui.y1])
-                        break
+        if self.main.gui.current_tab in ['Areas', 'Scale', 'Walls']:
+            if self.drag_handle is False and (width + height) > 20:
+                if self.main.gui.current_tab == 'Areas':
+                    self.area_temp.set_width(width)
+                    self.area_temp.set_height(height)
+                    self.area_temp.set_xy((
+                        min(self.main.gui.x0, self.main.gui.x1),
+                        min(self.main.gui.y0, self.main.gui.y1)))
+                elif self.main.gui.current_tab in ['Scale', 'Walls']:
+                    for p in self.ax.lines:
+                        if p.get_gid() == 'line_temp':
+                            p.set_data(
+                                [self.main.gui.x0, self.main.gui.x1],
+                                [self.main.gui.y0, self.main.gui.y1])
+                            break
+            elif self.drag_handle:
+                self.finish_drag()
+
         else:  # mark release position
             if hasattr(self, 'ax'):
                 create_new = True
@@ -610,13 +668,89 @@ class FloorCanvas(FigureCanvasQTAgg):
 
     def on_pick(self, event):
         """When mouse button picking objects."""
-        print('pick')
-        if self.current_artist is None:
+        if self.current_artist != event.artist:
             self.current_artist = event.artist
-            print("pick ", self.current_artist)
-        if isinstance(event.artist, Rectangle):
-            x, y = event.mouseevent.xdata, event.mouseevent.ydata
-            breakpoint()
+            gid = self.current_artist.get_gid()
+            if 'handle' in gid:
+                self.drag_handle = True
+            else:
+                try:
+                    row = int(gid)
+                except ValueError:
+                    row = None
+                if row is not None:
+                    self.main.tabs.currentWidget().select_row_col(row, 1)
+                    # Create handle_ to drag
+                    if isinstance(self.current_artist, Rectangle):
+                        self.current_artist.set_picker(False)
+                        [xmin, ymin], [xmax, ymax] = (
+                            self.current_artist.get_bbox().get_points())
+                        xmid = (xmax + xmin) // 2
+                        ymid = (ymax + ymin) // 2
+                        half = self.main.gui.handle_size // 2
+                        handles = [ # gid, pos
+                            ('handle_left', (xmin-half, ymid-half)),
+                            ('handle_top', (xmid-half, ymin-half)),
+                            ('handle_right', (xmax-half, ymid-half)),
+                            ('handle_bottom', (xmid-half, ymax-half))
+                             ]
+                    else:
+                        data = self.current_artist.get_data()
+                        print(f'data {gid} {data}')
+                        handles = [ #gid, pos
+                            ('handle_start', (100, 100)),
+                            ('handle_end', (100, 100))
+                            ]
+                    print(f'add handles gid = {gid}')
+                    for handle in handles:
+                        self.ax.add_patch(
+                            Rectangle(
+                                handle[1],
+                                self.main.gui.handle_size, self.main.gui.handle_size,
+                                edgecolor='black', facecolor='white',
+                                linewidth=2, fill=True,
+                                picker=True, gid=handle[0])
+                            )
+                    self.handles_activated = True
+                    self.draw_idle()
+
+    def reset_hover_pick(self):
+        """Reset to neither hovered nor picked artists."""
+        index_handles = []
+        for i, patch in enumerate(self.ax.patches):
+            if 'handle' in patch.get_gid():
+                index_handles.append(i)
+            elif patch == self.hovered_artist:
+                patch.set_linewidth(self.main.gui.annotations_linethick)
+        if len(index_handles):
+            index_handles.reverse()
+            print(index_handles)
+            for i in index_handles:
+                self.ax.patches[i].remove()
+        if self.hovered_artist:
+            self.hovered_artist.set_picker(True)
+            self.hovered_artist = None
+        self.current_artist = None
+        self.handles_activated = False
+        self.drag_handle = False
+        self.info_text.set_text('')
+        self.info_text.set_visible(False)
+
+        self.draw_idle()
+
+    def finish_drag(self):
+        """Update parameters when drag finished."""
+        active_row = self.main.tabs.currentWidget().active_row
+        # update table
+        if self.main.gui.current_tab == 'Areas':
+            [x0, y0], [x1, y1] = self.hovered_artist.get_bbox().get_points()
+            pos_string = f'{x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}'
+            self.main.areas_tab.table_list[active_row][2] = pos_string
+            w = self.main.areas_tab.table.cellWidget(active_row, 2)
+            w.setText(pos_string)
+            self.main.areas_tab.update_occ_map()
+
+        self.reset_hover_pick()
 
     def add_scale_highlight(self, x0, y0, x1, y1):
         """Highlight floor plan scale.
@@ -693,7 +827,9 @@ class FloorCanvas(FigureCanvasQTAgg):
         """
         self.area_highlight = Rectangle(
             (x0, y0), width, height,
-            edgecolor='red', fill=False, gid='area_highlight')
+            edgecolor='red', fill=False, gid='area_highlight',
+            linewidth=self.main.gui.annotations_linethick + 2,
+            linestyle='dotted')
         if len(self.ax.patches) > 0:
             for i, p in enumerate(self.ax.patches):
                 if p.get_gid() == 'area_highlight':
@@ -733,6 +869,26 @@ class FloorCanvas(FigureCanvasQTAgg):
         self.ax.plot(x, y, 'ro', markersize=15,  gid='source_selected')
         self.draw()
 
+    def update_info_text(self, event):
+        """Update self.info_text on hover."""
+        self.info_text.set_position((event.xdata+20, event.ydata-20))
+        try:
+            row = int(self.hovered_artist.get_gid())
+        except ValueError:
+            row = None
+        if row is not None:
+            text = ''
+            if self.main.gui.current_tab == 'Areas':
+                text = (
+                    f'Name: {self.main.areas_tab.table_list[row][1]}\n'
+                    f'Row: {row}\n'
+                    f'Occupancy: {self.main.areas_tab.table_list[row][-1]:.2f}'
+                    )
+            if text != '':
+                self.info_text.set_text(text)
+                self.info_text.set_visible(True)
+                self.draw_idle()
+
     def update_annotations_fontsize(self, fontsize):
         """Refresh all annotation text elements with input fontsize."""
         for text in self.ax.texts:
@@ -744,14 +900,59 @@ class FloorCanvas(FigureCanvasQTAgg):
         for line in self.ax.lines:
             line.set_linewidth(linethick)
         for patch in self.ax.patches:
-            patch.set_linewidth(linethick)
+            gid = patch.get_gid()
+            if 'handle' not in gid:
+                patch.set_linewidth(linethick)
         self.draw()
+
+    def update_area_on_drag(self):
+        """Update GUI when area dragged either by handles or not."""
+        width = round(self.main.gui.x1 - self.main.gui.x0)
+        height = round(self.main.gui.y1 - self.main.gui.y0)
+        if self.drag_handle:
+            gid_handle = self.current_artist.get_gid()
+            half = self.main.gui.handle_size // 2
+            row = int(self.hovered_artist.get_gid())
+            x0, y0, w0, h0 = self.main.areas_tab.get_area_from_text(
+                self.main.areas_tab.table_list[row][2])
+            print('---')
+            print(x0, y0, w0, h0, width, height, gid_handle)
+            if gid_handle == 'handle_right':
+                w0 = w0 + width
+                self.current_artist.set_xy((x0 + w0 - half, y0 + h0 // 2 - half))
+            elif gid_handle == 'handle_left':
+                w0 = w0 - width
+                x0 = x0 + width
+                self.current_artist.set_xy((x0 - half, y0 + h0 // 2 - half))
+            elif gid_handle == 'handle_top':
+                h0 = h0 - height
+                y0 = y0 + height
+                self.current_artist.set_xy((x0 + w0 // 2 - half, y0 - half))
+            else:
+                h0 = h0 + height
+                self.current_artist.set_xy((x0 + w0 // 2 - half, y0 + h0 - half))
+            print(x0, y0, w0, h0)
+            self.hovered_artist.set_xy((x0, y0))
+            self.hovered_artist.set_width(w0)
+            self.hovered_artist.set_height(h0)
+        else:
+            self.area_temp.set_width(np.abs(width))
+            self.area_temp.set_height(np.abs(height))
+            self.area_temp.set_xy((
+                min(self.main.gui.x0, self.main.gui.x1),
+                min(self.main.gui.y0, self.main.gui.y1)))
+        self.draw_idle()
 
     def floor_draw(self, reload_image=False):
         """Draw or redraw all elements."""
         da = self.main.gui
         self.fig.clear()
         self.ax = self.fig.add_subplot(111)
+
+        props = dict(boxstyle='round', facecolor='wheat', alpha=0.6, pad=1)
+        self.info_text = self.ax.text(
+            0, 0, '', fontsize=self.main.gui.annotations_fontsize, bbox=props)
+        self.info_text.set_visible(False)
 
         if reload_image:
             self.main.update_image()
@@ -940,16 +1141,13 @@ class VisualizationWidget(QWidget):
         self.gb_annotate.setLayout(vlo)
         self.hlo.addWidget(self.gb_annotate)
 
+        self.overlay_options = ['None', 'Occupancy factors', 'Dose', 'Max dose rate NM']
         self.gb_overlay = QGroupBox('Color overlay...')
         self.gb_overlay.setFont(uir.FontItalic())
         self.gb_overlay.setMinimumWidth(round(0.15*self.main.gui.panel_width))
         self.btns_overlay = QButtonGroup()
         vlo = QVBoxLayout()
-        for i, txt in enumerate([
-                'None',
-                'Occupancy factors',
-                'Dose',
-                'Max dose rate NM']):
+        for i, txt in enumerate(self.overlay_options):
             rbtn = QRadioButton(txt)
             self.btns_overlay.addButton(rbtn, i)
             vlo.addWidget(rbtn)
@@ -1000,14 +1198,17 @@ class VisualizationWidget(QWidget):
         vlo_alpha.addStretch()
 
     def overlay_text(self):
-        return self.btns_overlay.checkedButton.text()
+        """Get selected overlay text."""
+        return self.overlay_options[self.btns_overlay.checkedId()]
 
     def annotate_texts(self):
+        """Get selected annotation options as list of str."""
         return [btn.text() for btn in self.btns_annotate.buttons() if btn.isChecked()]
 
     def annotate_selections_changed(self):
-        """Update display when Display selections change."""
-        txts = self.annotate_texts()  #TODO
+        """Update display when annotation selections change."""
+        txts = self.annotate_texts()
+        #TODO
         #['Scale', 'Areas', 'Walls', 'Wall thickness',
         #                   'NM sources', 'CT sources', 'FL sources']
         if 'Scale' in txts:
@@ -1042,6 +1243,7 @@ class VisualizationWidget(QWidget):
         self.main.wFloorDisplay.canvas.image_overlay.set_data(overlay)
         self.main.wFloorDisplay.canvas.image_overlay.set(
             cmap=cmap, vmin=vmin, vmax=vmax)
+        self.main.wFloorDisplay.canvas.draw_idle()
 
     def dose_selections_changed(self):
         """Update display when Dose selections change."""
@@ -1182,6 +1384,7 @@ class InputTab(QWidget):
 
     def __init__(self, header='', info='', btn_get_pos_text='Get pos from figure'):
         super().__init__()
+        self.cellwidget_is_text = False
 
         self.vlo = QVBoxLayout()
         self.setLayout(self.vlo)
@@ -1218,6 +1421,17 @@ class InputTab(QWidget):
         self.hlo.addWidget(self.tb)
         self.hlo.addWidget(self.table)
 
+    def cell_changed(self, row, col, decimals=None):
+        """Value changed by user input."""
+        value = self.get_cell_value(row, col)
+        if decimals:
+            value = round(value, decimals)
+        self.table_list[row][col] = value
+        if col != 1:  # name
+            if self.label == 'Areas':
+                self.update_occ_map()
+            self.main.reset_dose()
+
     def select_row_col(self, row, col):
         """Set focus on selected row and col."""
         index = self.table.model().index(row, col)
@@ -1227,6 +1441,11 @@ class InputTab(QWidget):
 
     def cell_selection_changed(self, row, col):
         """Cell widget got focus. Change active row and highlight."""
+        w = self.table.cellWidget(row, col)
+        if isinstance(w, uir.TextCell):
+            self.cellwidget_is_text = True
+        else:
+            self.cellwidget_is_text = False
         self.select_row_col(row, col)
         try:
             self.highlight_selected_in_image()
@@ -1257,16 +1476,27 @@ class InputTab(QWidget):
             index of the deleted row
         """
         row = self.active_row
-        if self.active_row > -1:
-            self.table.removeRow(self.active_row)
-            self.table_list.pop(self.active_row)
-            if len(self.table_list) == 0:
-                self.add_cell_widgets(0)
-                self.table_list.append(copy.deepcopy(self.empty_row))
+        if row > -1:
+            proceed = messageboxes.proceed_question(self, 'Delete active row?')
+            if proceed:
+                if len(self.table_list) == 1:
+                    self.add_cell_widgets(0)
+                    self.table.removeRow(1)
+                    self.table_list = [copy.deepcopy(self.empty_row)]
+                    self.active_row = 0
+                else:
+                    print('table_list before pop')
+                    print(self.table_list)
+                    self.table.removeRow(row)
+                    self.table_list.pop(row)
+                    print('table_list after pop')
+                    print(self.table_list)
+                    self.update_row_number(row, -1)
+                if self.label == 'Areas':
+                    self.update_occ_map()
+                self.select_row_col(row, 0)
             else:
-                self.update_row_number(row, -1)
-            #self.table.setFocus()  # ? what is the function of this? delete?
-            self.select_row_col(self.active_row, 0)
+                row = -1
         return row
 
     def add_row(self):
@@ -1452,7 +1682,7 @@ class ScaleTab(InputTab):
         self.table.setHorizontalHeaderLabels(
             ['Line positions x0,y0,x1,y1', 'Actual length (m)'])
         self.empty_row = ['', 0.0]
-        self.table_list.append(copy.deepcopy(self.empty_row))
+        self.table_list = [copy.deepcopy(self.empty_row)]
         self.active_row = 0
         self.table.verticalHeader().setVisible(False)
         self.table.setColumnWidth(0, 40*self.main.gui.char_width)
@@ -1607,9 +1837,11 @@ class ScaleTab(InputTab):
                 details=warnings)
             dlg.exec()
 
-    def cell_changed(self, row, col):
+    def cell_changed(self, row, col, decimals=None):
         """Value changed by user input."""
         value = self.get_cell_value(0, 1)
+        if decimals:
+            value = round(value, decimals)
         self.main.gui.scale_length = value
         self.update_scale()
 
@@ -1636,7 +1868,7 @@ class AreasTab(InputTab):
         self.table.setHorizontalHeaderLabels(
             ['Active', 'Area name', 'x0,y0,x1,y1', 'Occupancy factor'])
         self.empty_row = [True, '', '', 1.]
-        self.table_list.append(copy.deepcopy(self.empty_row))
+        self.table_list = [copy.deepcopy(self.empty_row)]
         self.active_row = 0
         self.table.setColumnWidth(0, 10*self.main.gui.char_width)
         self.table.setColumnWidth(1, 30*self.main.gui.char_width)
@@ -1651,7 +1883,8 @@ class AreasTab(InputTab):
         self.table.setCellWidget(row, 0, uir.InputCheckBox(self, row=row, col=0))
         self.table.setCellWidget(row, 1, uir.TextCell(self, row=row, col=1))
         self.table.setCellWidget(row, 2, uir.TextCell(self, row=row, col=2))
-        self.table.setCellWidget(row, 3, uir.CellSpinBox(self, row=row, col=3))
+        self.table.setCellWidget(row, 3, uir.CellSpinBox(
+            self, initial_value=1., min_val=0., max_val=1., row=row, col=3))
 
     def get_pos(self):
         """Get positions for element as defined in figure."""
@@ -1708,33 +1941,39 @@ class AreasTab(InputTab):
 
     def update_occ_map(self):
         """Update array containing occupation factors and redraw."""
-        # reset occ_map and rectangle annotations
+        # reset occ_map, rectangle annotations and related parameters
+        print('update_occ_map')
         self.main.occ_map = np.ones(self.main.occ_map.shape)
         if len(self.main.wFloorDisplay.canvas.ax.patches) > 0:
-            for patch in self.main.wFloorDisplay.canvas.ax.patches:
-                patch.remove()
-
+            index_patches = []
+            for i, patch in enumerate(self.main.wFloorDisplay.canvas.ax.patches):
+                index_patches.append(i)
+            if len(index_patches) > 0:
+                index_patches.reverse()
+                for i in index_patches:
+                    self.main.wFloorDisplay.canvas.ax.patches[i].remove()
+                print(f'remove {index_patches}')
+        self.main.wFloorDisplay.canvas.reset_hover_pick()
+        print(f'table_list {self.table_list}')
         areas_this = []
+        print('table widgets as list')
+        print(self.get_table_as_list()[1:])
         for i in range(self.table.rowCount()):
             if self.table_list[i][0]:  # if active
                 tabitem = self.table.cellWidget(i, 2)
                 x0, y0, width, height = self.get_area_from_text(tabitem.text())
+                print(x0, y0, width, height)
                 self.main.occ_map[y0:y0+height, x0:x0+width] = self.table_list[i][3]
                 areas_this.append(Rectangle(
                     (x0, y0), width, height, edgecolor='blue',
                     linewidth=self.main.gui.annotations_linethick, fill=False,
-                    picker=60))
+                    picker=True, gid=f'{i}'))
+                print(f'add gid {i}')
                 self.main.wFloorDisplay.canvas.ax.add_patch(areas_this[-1])
         self.main.wFloorDisplay.canvas.image_overlay.set_data(self.main.occ_map)
         self.main.wFloorDisplay.canvas.image_overlay.set(
             cmap='rainbow', alpha=self.main.gui.alpha_overlay, clim=(0., 1.))
-        self.main.wFloorDisplay.canvas.draw()
-
-    def cell_changed(self, row, col):
-        """Value changed by user input."""
-        value = self.get_cell_value(row, col)
-        self.table_list[row][col] = value
-        self.update_occ_map()
+        self.main.wFloorDisplay.canvas.draw_idle()
 
     def delete_row(self):
         """Delete selected row."""
@@ -1753,7 +1992,6 @@ class AreasTab(InputTab):
         added_row = super().add_row()
         if added_row > -1:
             self.add_cell_widgets(added_row)
-            # TODO: update floor display
         return added_row
 
     def duplicate_row(self):
@@ -1805,7 +2043,7 @@ class WallsTab(InputTab):
             ['Active', 'Wall name', 'x0,y0,x1,y1', 'Material', 'Thickness (mm)'])
         self.empty_row = [True, '', '', 'Lead', 0.0]
         self.material_strings = [x.label for x in self.main.materials]
-        self.table_list.append(copy.deepcopy(self.empty_row))
+        self.table_list = [copy.deepcopy(self.empty_row)]
         self.active_row = 0
         self.table.setColumnWidth(0, 10*self.main.gui.char_width)
         self.table.setColumnWidth(1, 30*self.main.gui.char_width)
@@ -1906,14 +2144,6 @@ class WallsTab(InputTab):
             self.main.wFloorDisplay.canvas.add_wall_highlight(
                 x0, y0, x1, y1)
 
-    def cell_changed(self, row, col):
-        """Value changed by user input."""
-        value = self.get_cell_value(row, col)
-        self.table_list[row][col] = value
-        if col > 2:
-            pass
-            # TODO:self.main.update_dose()
-
     def delete_row(self):
         """Delete selected row."""
         removed_row = super().delete_row()
@@ -1988,7 +2218,7 @@ class NMsourcesTab(InputTab):
         self.empty_row = [True, '', '', 'F-18', True, '0.0', '0.0', '0.0',
                           '1.0', '0']
         self.isotope_strings = [x.label for x in self.main.isotopes]
-        self.table_list.append(copy.deepcopy(self.empty_row))
+        self.table_list = [copy.deepcopy(self.empty_row)]
         self.active_row = 0
         self.table.setColumnWidth(0, 10*self.main.gui.char_width)
         self.table.setColumnWidth(1, 25*self.main.gui.char_width)
@@ -2062,13 +2292,6 @@ class NMsourcesTab(InputTab):
                 x, y = self.get_pos_from_text(tabitem.text())
                 # TODO ....
         self.main.wFloorDisplay.canvas.floor_draw()
-
-    def cell_changed(self, row, col):
-        """Value changed by user input."""
-        value = self.get_cell_value(row, col)
-        self.table_list[row][col] = value
-        if col > 1:
-            self.update_NM_dose()
 
     def delete_row(self):
         """Delete selected row."""

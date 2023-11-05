@@ -8,7 +8,7 @@ User interface classes for different uses and reuses in Shield_NM_CT.
 import os
 
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QIcon, QFont
+from PyQt5.QtGui import QIcon, QFont, QKeyEvent
 from PyQt5.QtWidgets import (
     qApp, QWidget, QDialog, QDialogButtonBox, QVBoxLayout, QHBoxLayout, QFrame,
     QToolBar, QAction, QComboBox, QRadioButton, QButtonGroup, QToolButton,
@@ -19,25 +19,6 @@ from PyQt5.QtWidgets import (
 # Shield_NM_CT block start
 from Shield_NM_CT.config.Shield_NM_CT_constants import ENV_ICON_PATH
 # Shield_NM_CT block end
-
-
-class UnderConstruction(QWidget):
-    """Under construction widget to display for tests not finished."""
-
-    def __init__(self, txt=''):
-        super().__init__()
-        hlo = QHBoxLayout()
-        self.setLayout(hlo)
-        toolb = QToolBar()
-        act_warn = QAction(
-            QIcon(f'{os.environ[ENV_ICON_PATH]}warning.png'), '', self)
-        toolb.addActions([act_warn])
-        hlo.addWidget(toolb)
-        if txt == '':
-            txt = ('Sorry - Test is under construction. Do not trust the results. '
-                   'Run test might cause crash or breakpoint.')
-        hlo.addWidget(LabelItalic(txt))
-        hlo.addStretch()
 
 
 class LabelItalic(QLabel):
@@ -386,48 +367,6 @@ class ToolBarTableExport(QToolBar):
             self.parent.flag_edit(True)
 
 
-class ListWidgetCheckable(QListWidget):
-    """Checkable list widget."""
-
-    def __init__(self, texts=[], set_checked_ids=[]):
-        super().__init__()
-        self.texts = texts
-        self.addItems(self.texts)
-
-        for i in range(len(self.texts)):
-            item = self.item(i)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            if i in set_checked_ids:
-                item.setCheckState(Qt.Checked)
-            else:
-                item.setCheckState(Qt.Unchecked)
-
-    def get_checked_ids(self):
-        """Get checked ids from list."""
-        checked_ids = []
-        for i in range(self.count()):
-            if self.item(i).checkState() == Qt.Checked:
-                checked_ids.append(i)
-        return checked_ids
-
-    def get_checked_texts(self):
-        """Get checked strings from list."""
-        checked_texts = []
-        for i, txt in enumerate(self.texts):
-            if self.item(i).checkState() == Qt.Checked:
-                checked_texts.append(txt)
-        return checked_texts
-
-    def set_checked_texts(self, set_texts):
-        """Set checked strings in list."""
-        for i, text in enumerate(self.texts):
-            item = self.item(i)
-            if text in set_texts:
-                item.setCheckState(Qt.Checked)
-            else:
-                item.setCheckState(Qt.Unchecked)
-
-
 class CheckCell(QCheckBox):
     """CheckBox for use in TreeWidget cells."""
 
@@ -508,60 +447,6 @@ class BoolSelect(QWidget):
         return self.btn_true.isChecked()
 
 
-class CheckComboBox(QComboBox):
-    """Class for checkable QComboBox."""
-
-    # https://learndataanalysis.org/how-to-create-checkable-combobox-widget-pyqt5-tutorial/
-    def __init__(self):
-        super().__init__()
-        self.edited = False
-        self.view().pressed.connect(self.itemPressed)
-
-    def setItemChecked(self, index, checked=False):
-        """Set checkstate of list index.
-
-        Parameters
-        ----------
-        index : int
-            list index to set checkstate for
-        checked : bool, optional
-            The default is False.
-        """
-        item = self.model().item(index, self.modelColumn())
-        if checked:
-            item.setCheckState(Qt.Checked)
-        else:
-            item.setCheckState(Qt.Unchecked)
-
-    def itemPressed(self, index):
-        """Handle item pressed."""
-        item = self.model().itemFromIndex(index)
-
-        if item.checkState() == Qt.Checked:
-            item.setCheckState(Qt.Unchecked)
-        else:
-            item.setCheckState(Qt.Checked)
-        self.edited = True
-
-    def hidePopup(self):
-        if not self.edited:
-            super().hidePopup()
-        self.edited = False
-
-    def itemChecked(self, index):
-        item = self.model().item(index, self.modelColumn())
-        return item.checkState() == Qt.Checked
-
-    def get_ids_checked(self):
-        """Get array of checked ids."""
-        ids = []
-        for i in range(self.count()):
-            if self.itemChecked(i):
-                ids.append(i)
-
-        return ids
-
-
 class StatusBar(QStatusBar):
     """Tweeks to QStatusBar."""
 
@@ -639,8 +524,17 @@ class TextCell(QLineEdit):
         self.col = col
 
     def focusInEvent(self, event):
+        """Notify InputTab (ui_main) which cell selected."""
         self.parent.cell_selection_changed(self.row, self.col)
         super().focusInEvent(event)
+
+    def keyReleaseEvent(self, event):
+        """Avoid pressed return trigger get_pos from InputTab (ui_main)."""
+        if isinstance(event, QKeyEvent):
+            if event.key() == Qt.Key_Return:
+                pass
+            else:
+                super().keyReleaseEvent(event)
 
 
 class CellSpinBox(QDoubleSpinBox):
@@ -675,11 +569,20 @@ class CellSpinBox(QDoubleSpinBox):
         self.setDecimals(decimals)
         self.setValue(initial_value)
         self.valueChanged.connect(
-            lambda: self.parent.cell_changed(self.row, self.col))
+            lambda: self.parent.cell_changed(self.row, self.col, decimals=decimals))
 
     def focusInEvent(self, event):
+        """Notify InputTab (ui_main) which cell selected."""
         self.parent.cell_selection_changed(self.row, self.col)
         super().focusInEvent(event)
+
+    def keyReleaseEvent(self, event):
+        """Avoid pressed return trigger get_pos from InputTab (ui_main)."""
+        if isinstance(event, QKeyEvent):
+            if event.key() == Qt.Key_Return:
+                pass
+            else:
+                super().keyReleaseEvent(event)
 
 
 class InputCheckBox(QCheckBox):
@@ -695,8 +598,17 @@ class InputCheckBox(QCheckBox):
         self.toggled.connect(lambda: self.parent.cell_changed(self.row, self.col))
 
     def focusInEvent(self, event):
+        """Notify InputTab (ui_main) which cell selected."""
         self.parent.cell_selection_changed(self.row, self.col)
         super().focusInEvent(event)
+
+    def keyReleaseEvent(self, event):
+        """Avoid pressed return trigger get_pos from InputTab (ui_main)."""
+        if isinstance(event, QKeyEvent):
+            if event.key() == Qt.Key_Return:
+                pass
+            else:
+                super().keyReleaseEvent(event)
 
 
 class CellCombo(QComboBox):
@@ -712,5 +624,14 @@ class CellCombo(QComboBox):
             lambda: self.parent.cell_changed(self.row, self.col))
 
     def focusInEvent(self, event):
+        """Notify InputTab (ui_main) which cell selected."""
         self.parent.cell_selection_changed(self.row, self.col)
         super().focusInEvent(event)
+
+    def keyReleaseEvent(self, event):
+        """Avoid pressed return trigger get_pos from InputTab (ui_main)."""
+        if isinstance(event, QKeyEvent):
+            if event.key() == Qt.Key_Return:
+                pass
+            else:
+                super().keyReleaseEvent(event)
