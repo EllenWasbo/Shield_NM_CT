@@ -30,7 +30,7 @@ ENV_ICON_PATH = 'SHIELD_NM_CT_ICON_PATH'
 USER_PREFS_FNAME = 'user_preferences.yaml'
 
 ANNOTATION_OPTIONS = ['Scale', 'Areas', 'Walls', 'Wall thickness',
-                   'NM sources', 'CT sources', 'FL sources']
+                   'NM sources', 'CT sources', 'Other sources', 'Verification points']
 # same as Tab label where this should be used to test whether to force display
 
 CONFIG_FNAMES = {

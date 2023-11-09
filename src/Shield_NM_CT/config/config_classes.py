@@ -33,9 +33,14 @@ class LastModified:
 
 @dataclass
 class GeneralValues:
-    """Class holding values for calculations."""
+    """Class holding values for calculations.
+
+    NB: Materials and kV-sources need to match config_default/shield_data.yaml.
+    """
 
     working_days: int = 230
+    convert_to_mSv: bool = True  # multiply dose(rate) by 0.001 to obtain dose in mSv
+    correct_thickness: bool = False  # perform geometrical thickness correction
     c0: float = 1.7
     c1: float = 1.0
     c2: float = 0.5
@@ -45,6 +50,8 @@ class GeneralValues:
     shield_material_above: str = 'Concrete'
     shield_mm_below: float = 200.0
     shield_material_below: str = 'Concrete'
+    materials: list[str] = field(default_factory=lambda: ['Lead', 'Concrete'])
+    kV_sources: list[str] = field(default_factory=lambda: ['CT 120 kVp', 'CT 140 kVp'])
 
 
 @dataclass
@@ -79,12 +86,12 @@ class Material:
 class ShieldData:
     """TVLs and/or alpha, beta, gamma parameters for broad beam data."""
 
-    kVp: float = 0.0  # if CT
-    isotope_label: str = ''  # if NM source
-    material_label: str = ''
+    kV_source: str = ''  # if CT or other xray
+    isotope: str = ''  # if NM source
+    material: str = ''
     alpha: float = 0.0
     beta: float = 0.0
     gamma: float = 0.0
-    TVL1: float = 0.0
-    TVL2: float = 0.0
-    TVLe: float = 0.0
+    tvl1: float = 0.0
+    tvl2: float = 0.0
+    tvle: float = 0.0

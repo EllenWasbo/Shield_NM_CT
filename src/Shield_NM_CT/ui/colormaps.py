@@ -14,7 +14,7 @@ def register_cmaps():
     ncolors = 256
 
     color_array = plt.get_cmap('rainbow')(range(ncolors))
-    color_array[:,-1] = np.linspace(0.,1.,ncolors)
+    color_array[:, -1] = np.linspace(0.,1., ncolors)
     map_object = LinearSegmentedColormap.from_list(
-        name='rainbow_alpha',colors=color_array)
+        name='rainbow_alpha', colors=color_array)
     plt.register_cmap(cmap=map_object)

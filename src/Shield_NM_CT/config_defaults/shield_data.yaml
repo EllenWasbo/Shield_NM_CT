@@ -1,35 +1,35 @@
-kVp: 120
-material_label: Lead
+kV_source: 'CT 120 kVp'
+material: Lead
 alpha: 2.246
 beta: 5.73
 gamma: 0.547
 ---
-kVp: 140
-material_label: Lead
+kV_source: 'CT 140 kVp'
+material: Lead
 alpha: 2.009
 beta: 3.99
 gamma: 0.342
 ---
-kVp: 120
-material_label: 'Concrete 2.35 g/m3'
+kV_source: 'CT 120 kVp'
+material: Concrete
 alpha: 0.0383
 beta: 0.0142
 gamma: 0.658
 ---
-kVp: 140
-material_label: 'Concrete 2.35 g/m3'
+kV_source: 'CT 140 kVp'
+material: Concrete
 alpha: 0.0336
 beta: 0.0122
 gamma: 0.519
 ---
-isotope_label: 'F-18'
-material_label: Lead
+isotope: 'F-18'
+material: Lead
 alpha: 1.5430
 beta: -0.4408
 gamma: 2.136
 ---
-isotope_label: 'F-18'
-material_label: 'Concrete 2.35 g/m3'
+isotope: 'F-18'
+material: Concrete
 alpha: 0.1539
 beta: -0.1161
 gamma: 2.0752

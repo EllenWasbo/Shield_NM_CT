@@ -18,7 +18,7 @@ import webbrowser
 from PyQt5.QtGui import QIcon, QPixmap, QKeyEvent
 from PyQt5.QtCore import Qt, QTimer, QFile, QItemSelectionModel
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
+    QApplication, qApp, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QGroupBox, QButtonGroup, QFormLayout,
     QScrollArea, QTabWidget, QTableWidget,
     QPushButton, QLabel, QSpinBox, QDoubleSpinBox,
@@ -31,7 +31,6 @@ from matplotlib.backends.backend_qt5agg import (
 from matplotlib.figure import Figure
 import matplotlib.image as mpimg
 from matplotlib.patches import Rectangle
-from matplotlib.widgets import RectangleSelector
 
 # Shield_NM_CT block start
 from Shield_NM_CT.config.Shield_NM_CT_constants import (
@@ -41,6 +40,7 @@ from Shield_NM_CT.ui import messageboxes
 from Shield_NM_CT.ui import settings
 import Shield_NM_CT.ui.reusable_widgets as uir
 from Shield_NM_CT.ui.ui_dialogs import AboutDialog, EditAnnotationsDialog
+from Shield_NM_CT.scripts.calculate_dose import calculate_dose
 import Shield_NM_CT.resources
 # Shield_NM_CT block end
 
@@ -58,7 +58,7 @@ class GuiData():
     scale_start = ()
     scale_end = ()
     scale_length = 0.
-    calibration_factor = 1.  # meters/pixel
+    calibration_factor = None  # float: meters/pixel
     x0 = 0.0  # mouse x coordinate FloorCanvas.on_press
     x1 = 0.0  # mouse x coordinate on_motion (if already pressed) and on_release
     y0 = 0.0  # same as above for y coordinate
@@ -67,8 +67,10 @@ class GuiData():
     annotations = True
     annotations_fontsize = 15
     annotations_linethick = 3
+    annotations_markersize = (12, 17)  # first standard, second hovered
     annotations_delta = (20, 20)
     handle_size = 10
+    picker = 10  # picker margin for point and line
     alpha_image = 1.0
     alpha_overlay = 0.5
     panel_width = 400
@@ -85,6 +87,7 @@ class MainWindow(QMainWindow):
 
         self.image = np.zeros(2)
         self.occ_map = np.zeros(2)
+        self.dose_dict = {}  # dictionary holding dose calculations
         self.ct_dose_map = np.zeros(2)
 
         self.save_blocked = False
@@ -131,13 +134,13 @@ class MainWindow(QMainWindow):
         self.areas_tab = AreasTab(self)
         self.walls_tab = WallsTab(self)
         self.NMsources_tab = NMsourcesTab(self)
-        #TODO self.CTsources_tab = CTsources_tab(self)
+        self.CTsources_tab = CTsourcesTab(self)
         #TODO self.FLsources_tab = FLsources_tab(self)
         self.tabs.addTab(self.scale_tab, "Scale")
         self.tabs.addTab(self.areas_tab, "Areas")
         self.tabs.addTab(self.walls_tab, "Walls")
         self.tabs.addTab(self.NMsources_tab, "NM sources")
-        #TODOself.tabs.addTab(self.CTsources_tab, "CT sources")
+        self.tabs.addTab(self.CTsources_tab, "CT sources")
         #TODOself.tabs.addTab(self.FLsources_tab, "Fluoro sources")
 
         bbox = QHBoxLayout()
@@ -215,7 +218,8 @@ class MainWindow(QMainWindow):
         if self.user_prefs.dark_mode:
             plt.style.use('dark_background')
         _, _, self.isotopes = cff.load_settings(fname='isotopes')
-        _, _, self.materials = cff.load_settings(fname='materials')
+        _, _, self.ct_doserates = cff.load_settings(fname='ct_doserates')
+        _, _, self.shield_data = cff.load_settings(fname='shield_data')
         _, _, self.general_values = cff.load_settings(fname='general_values')
 
         if after_edit_settings:
@@ -245,7 +249,20 @@ class MainWindow(QMainWindow):
         pass
 
     def calculate_dose(self):
-        pass
+        status, msgs = calculate_dose(self)  # updating self.dose_dict
+        if msgs:
+            dlg = messageboxes.MessageBoxWithDetails(
+                self, title='Warnings',
+                msg='Found issues during calculation',
+                info='See details',
+                icon=QMessageBox.Warning,
+                details=msgs)
+            dlg.exec()
+        if status:
+            if 'Dose' not in self.overlay_text():
+                self.wVisual.btns_overlay.button(2).setChecked(True)
+            else:
+                self.wFloorDisplay.canvas.update_dose_overlay()
 
     def update_dose_days(self):
         #TODO - number of working days changed - update dose if exists
@@ -270,7 +287,6 @@ class MainWindow(QMainWindow):
                     except AttributeError:
                         pass
 
-
     def exit_app(self):
         """Exit app."""
         sys.exit()
@@ -285,9 +301,19 @@ class MainWindow(QMainWindow):
         url = 'https://github.com/EllenWasbo/Shield_NM_CT/wiki'
         webbrowser.open(url=url, new=1)
 
+    def start_wait_cursor(self):
+        """Block mouse events by wait cursor."""
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        qApp.processEvents()
+
+    def stop_wait_cursor(self):
+        """Return to normal mouse cursor after wait cursor."""
+        QApplication.restoreOverrideCursor()
+
     def new_tab_selection(self, i):
         """Remove temporary, tab-specific annotations + more settings."""
         if hasattr(self.tabs.currentWidget(), 'label'):
+            self.wFloorDisplay.canvas.reset_hover_pick()
             self.gui.current_tab = self.tabs.currentWidget().label
             if hasattr(self.wFloorDisplay.canvas, 'ax'):
                 if len(self.wFloorDisplay.canvas.ax.patches) > 0:
@@ -297,16 +323,17 @@ class MainWindow(QMainWindow):
                             self.wFloorDisplay.canvas.ax.patches[i].remove()
                             break
                 if len(self.wFloorDisplay.canvas.ax.lines) > 0:
+                    index_to_remove = []
                     for i, p in enumerate(
                             self.wFloorDisplay.canvas.ax.lines):
                         if p.get_gid() in [
                                 'line_temp',
-                                'wall_selected',
-                                'source_selected']:
-                            try:
-                                self.wFloorDisplay.canvas.ax.lines[i].remove()
-                            except IndexError:
-                                pass
+                                'wall_highlight']:
+                            index_to_remove.append(i)
+                    if index_to_remove:
+                        index_to_remove.reverse()
+                        for i in index_to_remove:
+                            self.wFloorDisplay.canvas.ax.lines[i].remove()
                 self.blockSignals(True)
                 if self.gui.current_tab in ANNOTATION_OPTIONS:
                     self.wVisual.btns_annotate.button(
@@ -315,10 +342,13 @@ class MainWindow(QMainWindow):
                     self.wVisual.set_alpha_overlay(0.2)
                     self.wVisual.btns_overlay.button(1).setChecked(True)
                     self.areas_tab.update_occ_map()
-                else:  #TODO more options if dose
+                elif self.gui.current_tab == 'Walls':
                     self.wVisual.btns_overlay.button(0).setChecked(True)
+                elif ('source' in self.gui.current_tab
+                      or 'point' in self.gui.current_tab):
+                    self.wVisual.btns_overlay.button(0).setChecked(True)
+                    self.tabs.currentWidget().update_source_annotations()
                 self.blockSignals(False)
-                self.wFloorDisplay.canvas.draw()
 
     def load_floor_plan_image(self):
         """Open image and update GUI."""
@@ -519,18 +549,19 @@ class FloorCanvas(FigureCanvasQTAgg):
         self.info_text = None
         self.handles_activated = False  # True if handles for editing shown
         self.drag_handle = False  # True if handles for editing by drag picked
-        # INFO gid used for different artists:
+
+        # INFO:
         '''
+        gid used for different artists:
         'line_temp':	 dotted line for marked new line
         'scale': line for currently defined scale (line)
         'scale_text': text for currently defined length of scale line
         'measured_text': text for length of line_temp if scale set
         'area_temp': dotted Rectangle for marked area
         'area_highlight': red dottet Rectangle for selected row in Areas table
-        'wall_selected':	
-        'source_selected':
+        'wall_highlight':
         'point_release'
-        '{int}': row number in table for current tab
+        '(source modality_){int}': row number in table for current tab
         'handle_?': pickable Rectangle to drag position of line (_start, _end)
                         or of area (_left, _right, _top, _bottom)
         '''
@@ -586,8 +617,11 @@ class FloorCanvas(FigureCanvasQTAgg):
                         self.add_measured_length()
 
                     self.draw_idle()
+                else:
+                    self.drag_handle = True
+                    self.update_source_on_drag()
         else:  # on hover - make thicker + annotate with info_text
-            if self.handles_activated == False and event.inaxes == self.ax:
+            if self.handles_activated is False and event.inaxes == self.ax:
                 prev_hovered_artist = self.hovered_artist
                 hit = False
                 if self.main.gui.current_tab == 'Areas':
@@ -607,34 +641,55 @@ class FloorCanvas(FigureCanvasQTAgg):
                             hit = True
                     if hit is False:
                         self.hovered_artist = None
+                        '''
+                        if self.hovered_artist is not None:
+                            self.hovered_artist.set_markersize(
+                                self.main.gui.annotations_markersize[0])
+                            self.info_text.set_visible(False)
+                            self.draw_idle()
+                        '''
+                    else:
+                        self.hovered_artist.set_markersize(
+                            self.main.gui.annotations_markersize[1])
+                        self.info_text.set_visible(True)
+                        self.draw_idle()
 
                 if prev_hovered_artist != self.hovered_artist:  # redraw
-                    if prev_hovered_artist != None:  # reset linethickness
-                        prev_hovered_artist.set_linewidth(
-                            self.main.gui.annotations_linethick)
+                    if prev_hovered_artist is not None:
+                        # reset linethickness or markersize
+                        if self.main.gui.current_tab in ['Areas', 'Walls']:
+                            prev_hovered_artist.set_linewidth(
+                                self.main.gui.annotations_linethick)
+                        else:
+                            prev_hovered_artist.set_markersize(
+                                self.main.gui.annotations_markersize[0])
                         self.draw_idle()
                     if self.hovered_artist is None:
                         self.info_text.set_visible(False)
                         self.draw_idle()
                     else:
-                        self.hovered_artist.set_linewidth(
-                            self.main.gui.annotations_linethick + 2)
+                        if self.main.gui.current_tab in ['Areas', 'Walls']:
+                            self.hovered_artist.set_linewidth(
+                                self.main.gui.annotations_linethick + 2)
+                        else:
+                            self.hovered_artist.set_markersize(
+                                self.main.gui.annotations_markersize[1])
                         self.update_info_text(event)
                         self.draw_idle()
 
     def on_release(self, event):
         """When mouse button released."""
         self.mouse_pressed = False
-        self.main.gui.x1, self.main.gui.y1 \
-            = event.xdata, event.ydata
+        self.main.gui.x1, self.main.gui.y1 = event.xdata, event.ydata
 
-        if self.main.gui.x1 is not None:
-            width = np.abs(self.main.gui.x1 - self.main.gui.x0)
-            height = np.abs(self.main.gui.y1 - self.main.gui.y0)
-        else:
-            width = 0
-            height = 0
         if self.main.gui.current_tab in ['Areas', 'Scale', 'Walls']:
+            if self.main.gui.x1 is not None:
+                width = np.abs(self.main.gui.x1 - self.main.gui.x0)
+                height = np.abs(self.main.gui.y1 - self.main.gui.y0)
+            else:
+                width = 0
+                height = 0
+
             if self.drag_handle is False and (width + height) > 20:
                 if self.main.gui.current_tab == 'Areas':
                     self.area_temp.set_width(width)
@@ -661,10 +716,16 @@ class FloorCanvas(FigureCanvasQTAgg):
                         p.set_data(event.xdata, event.ydata)
                         break
                 if create_new:
-                    self.ax.plot(event.xdata, event.ydata,
-                                 'ko', markersize=10, gid='point_release')
+                    self.ax.plot(
+                        event.xdata, event.ydata,
+                        'ko', fillstyle='none',
+                        markersize=self.main.gui.annotations_markersize[0],
+                        gid='point_release')
 
-        self.draw()
+            if self.drag_handle:
+                self.finish_drag()
+
+        self.draw_idle()
 
     def on_pick(self, event):
         """When mouse button picking objects."""
@@ -674,6 +735,9 @@ class FloorCanvas(FigureCanvasQTAgg):
             if 'handle' in gid:
                 self.drag_handle = True
             else:
+                if '_' in gid:
+                    gid_split = gid.split('_')
+                    gid = gid_split[1]
                 try:
                     row = int(gid)
                 except ValueError:
@@ -688,20 +752,22 @@ class FloorCanvas(FigureCanvasQTAgg):
                         xmid = (xmax + xmin) // 2
                         ymid = (ymax + ymin) // 2
                         half = self.main.gui.handle_size // 2
-                        handles = [ # gid, pos
+                        handles = [  # gid, pos
                             ('handle_left', (xmin-half, ymid-half)),
                             ('handle_top', (xmid-half, ymin-half)),
                             ('handle_right', (xmax-half, ymid-half)),
                             ('handle_bottom', (xmid-half, ymax-half))
                              ]
+                    elif self.main.gui.current_tab == 'Walls':
+                            start_xy, end_xy = self.current_artist.get_data()
+                            handles = [  # gid, pos
+                                ('handle_start', start_xy),
+                                ('handle_end', end_xy)
+                                ]
                     else:
-                        data = self.current_artist.get_data()
-                        print(f'data {gid} {data}')
-                        handles = [ #gid, pos
-                            ('handle_start', (100, 100)),
-                            ('handle_end', (100, 100))
-                            ]
-                    print(f'add handles gid = {gid}')
+                        self.sourcepos_highlight()
+                        handles = []
+
                     for handle in handles:
                         self.ax.add_patch(
                             Rectangle(
@@ -711,8 +777,8 @@ class FloorCanvas(FigureCanvasQTAgg):
                                 linewidth=2, fill=True,
                                 picker=True, gid=handle[0])
                             )
-                    self.handles_activated = True
-                    self.draw_idle()
+                        self.handles_activated = True
+                        self.draw_idle()
 
     def reset_hover_pick(self):
         """Reset to neither hovered nor picked artists."""
@@ -724,11 +790,13 @@ class FloorCanvas(FigureCanvasQTAgg):
                 patch.set_linewidth(self.main.gui.annotations_linethick)
         if len(index_handles):
             index_handles.reverse()
-            print(index_handles)
             for i in index_handles:
                 self.ax.patches[i].remove()
         if self.hovered_artist:
-            self.hovered_artist.set_picker(True)
+            if self.main.gui.current_tab == 'Areas':
+                self.hovered_artist.set_picker(True)
+            else:
+                self.hovered_artist.set_picker(self.main.gui.picker)
             self.hovered_artist = None
         self.current_artist = None
         self.handles_activated = False
@@ -742,13 +810,22 @@ class FloorCanvas(FigureCanvasQTAgg):
         """Update parameters when drag finished."""
         active_row = self.main.tabs.currentWidget().active_row
         # update table
-        if self.main.gui.current_tab == 'Areas':
+        if self.main.gui.current_tab in ['Areas', 'Walls']:
             [x0, y0], [x1, y1] = self.hovered_artist.get_bbox().get_points()
             pos_string = f'{x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}'
-            self.main.areas_tab.table_list[active_row][2] = pos_string
-            w = self.main.areas_tab.table.cellWidget(active_row, 2)
-            w.setText(pos_string)
+        else:
+            pos_string = f'{self.main.gui.x1:.0f}, {self.main.gui.y1:.0f}'
+
+        self.main.tabs.currentWidget().table_list[active_row][2] = pos_string
+        w = self.main.tabs.currentWidget().table.cellWidget(active_row, 2)
+        w.setText(pos_string)
+
+        if self.main.gui.current_tab == 'Areas':
             self.main.areas_tab.update_occ_map()
+        elif ('source' in self.main.gui.current_tab
+              or 'point' in self.main.gui.current_tab):
+            self.sourcepos_highlight()
+        self.main.reset_dose()
 
         self.reset_hover_pick()
 
@@ -766,7 +843,8 @@ class FloorCanvas(FigureCanvasQTAgg):
             if p.get_gid() == 'scale':
                 self.ax.lines[i].remove()
         self.ax.plot([x0, x1], [y0, y1],
-                     'b', marker='|', linewidth=2., gid='scale', picker=6)
+                     'b', marker='|', linewidth=2., picker=self.main.gui.picker,
+                     gid='scale')
         if self.main.gui.scale_length > 0:
             if hasattr(self, 'scale_text'):
                 self.scale_text.set_position(
@@ -780,7 +858,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                     y0+self.main.gui.annotations_delta[1],
                     f'{self.main.gui.scale_length:.3f} m',
                     fontsize=self.main.gui.annotations_fontsize, color='b',
-                    picker=6)
+                    picker=self.main.gui.picker)
             if hasattr(self, 'measured_text'):
                 self.measured_text.set_text('')
         self.draw()
@@ -848,41 +926,53 @@ class FloorCanvas(FigureCanvasQTAgg):
         y1 : int
         """
         for i, p in enumerate(self.ax.lines):
-            if p.get_gid() == 'wall_selected':
+            if p.get_gid() == 'wall_highlight':
                 self.ax.lines[i].remove()
         self.ax.plot([x0, x1], [y0, y1],
-                     'r--', marker='.', linewidth=2., gid='wall_selected')
-        self.draw()
+                     'r--', marker='.', linewidth=2., gid='wall_highlight')
+        self.draw_idle()
 
-
-    def add_sourcepos_highlight(self, x, y):
-        """Highlight source selected in table.
-
-        Parameters
-        ----------
-        x : int
-        y : int
-        """
+    def sourcepos_highlight(self):
+        """Highlight source selected in table."""
+        w = self.main.tabs.currentWidget()
         for i, p in enumerate(self.ax.lines):
-            if p.get_gid() == 'source_selected':
-                self.ax.lines[i].remove()
-        self.ax.plot(x, y, 'ro', markersize=15,  gid='source_selected')
-        self.draw()
+            if p.get_gid() == f'{w.modality}_{w.active_row}':
+                p.set_markeredgewidth(3)
+            elif p.get_gid() == 'point_release':
+                pass
+            else:
+                p.set_markeredgewidth(0)
+        self.draw_idle()
 
     def update_info_text(self, event):
         """Update self.info_text on hover."""
         self.info_text.set_position((event.xdata+20, event.ydata-20))
+        row_txt = self.hovered_artist.get_gid()
+        if '_' in row_txt:
+            row_txt = row_txt.split('_')[1]
         try:
-            row = int(self.hovered_artist.get_gid())
+            row = int(row_txt)
         except ValueError:
             row = None
         if row is not None:
             text = ''
+            table_list = self.main.tabs.currentWidget().table_list
+            text = (
+                f'Name: {table_list[row][1]}\n'
+                f'Row: {row}\n'
+                )
             if self.main.gui.current_tab == 'Areas':
-                text = (
-                    f'Name: {self.main.areas_tab.table_list[row][1]}\n'
-                    f'Row: {row}\n'
-                    f'Occupancy: {self.main.areas_tab.table_list[row][-1]:.2f}'
+                text = text + f'Occupancy: {table_list[row][-1]:.2f}'
+            elif self.main.gui.current_tab == 'Walls':
+                text = text + (
+                    f'Material: {table_list[row][3]}\n'
+                    f'Thickness: {table_list[row][-1]:.2f}mm'
+                    )
+            elif self.main.gui.current_tab == 'NM sources':
+                text = text + (
+                    f'Isotope: {table_list[row][3]}\n'
+                    f'Activity: {table_list[row][5]}\n'
+                    f'# per day: {table_list[row][-1]}'
                     )
             if text != '':
                 self.info_text.set_text(text)
@@ -915,8 +1005,6 @@ class FloorCanvas(FigureCanvasQTAgg):
             row = int(self.hovered_artist.get_gid())
             x0, y0, w0, h0 = self.main.areas_tab.get_area_from_text(
                 self.main.areas_tab.table_list[row][2])
-            print('---')
-            print(x0, y0, w0, h0, width, height, gid_handle)
             if gid_handle == 'handle_right':
                 w0 = w0 + width
                 self.current_artist.set_xy((x0 + w0 - half, y0 + h0 // 2 - half))
@@ -931,7 +1019,6 @@ class FloorCanvas(FigureCanvasQTAgg):
             else:
                 h0 = h0 + height
                 self.current_artist.set_xy((x0 + w0 // 2 - half, y0 + h0 - half))
-            print(x0, y0, w0, h0)
             self.hovered_artist.set_xy((x0, y0))
             self.hovered_artist.set_width(w0)
             self.hovered_artist.set_height(h0)
@@ -943,9 +1030,16 @@ class FloorCanvas(FigureCanvasQTAgg):
                 min(self.main.gui.y0, self.main.gui.y1)))
         self.draw_idle()
 
+    def update_source_on_drag(self):
+        """Update GUI when point source dragged."""
+        self.current_artist.set_data(
+            round(self.main.gui.x1),
+            round(self.main.gui.y1)
+            )
+        self.draw_idle()
+
     def floor_draw(self, reload_image=False):
         """Draw or redraw all elements."""
-        da = self.main.gui
         self.fig.clear()
         self.ax = self.fig.add_subplot(111)
 
@@ -972,6 +1066,7 @@ class FloorCanvas(FigureCanvasQTAgg):
             self.image_overlay = self.ax.imshow(np.zeros(self.main.image.shape))
         else:
             pass #TODO
+            self.image_overlay = self.ax.imshow(np.zeros(self.main.image.shape))
 
         self.draw()
 
@@ -1093,7 +1188,6 @@ class InfoToolBar(QWidget):
         vlo.addWidget(self.lbl_doserate_nm)
         vlo.addWidget(self.lbl_dose_ct)
         vlo.addStretch()
-        #self.calibration_factor = self.main.gui.calibration_factor
 
         canvas.mpl_connect('motion_notify_event', self.on_move)
 
@@ -1227,22 +1321,43 @@ class VisualizationWidget(QWidget):
             if len(self.main.wFloorDisplay.canvas.ax.patches) > 0:
                 for patch in self.main.wFloorDisplay.canvas.ax.patches:
                     patch.remove()
-            self.main.wFloorDisplay.canvas.draw()
+            self.main.wFloorDisplay.canvas.draw_idle()
+
+        remove_modalities = []
+        if 'NM sources' in txts:
+            self.main.NMsources_tab.update_source_annotations()
+            self.main.wFloorDisplay.canvas.draw_idle()
+        else:
+            remove_modalities.append('NM')
+
+        if len(remove_modalities):
+            for line in self.main.wFloorDisplay.canvas.ax.lines:
+                for mod in remove_modalities:
+                    if mod in line.get_gid():
+                        line.remove()
+                        break
+            self.main.wFloorDisplay.canvas.draw_idle()
 
     def overlay_selections_changed(self):
         """Update display when Overlay selections change."""
         if self.overlay_text() == 'None':
             overlay = np.zeros(self.main.image.shape)
         elif self.overlay_text() == 'Occupancy factors':
-            overlay = copy.deepcopy(self.main.occ_map)
+            overlay = copy.deepcopy(self.main.occ_map)#why copy?
             cmap = 'rainbow'
             vmin = 0.
             vmax = 1.
         elif self.overlay_text() == 'Dose':
-            pass #TODO which dose
-        self.main.wFloorDisplay.canvas.image_overlay.set_data(overlay)
-        self.main.wFloorDisplay.canvas.image_overlay.set(
-            cmap=cmap, vmin=vmin, vmax=vmax)
+            self.main.wFloorDisplay.canvas.update_dose_overlay()
+            overlay = None
+        else:  # Doserate max NM
+            #TODO overlay = self.main.dose_dict[]
+            pass
+        if overlay:
+            self.main.wFloorDisplay.canvas.image_overlay.set_data(overlay)
+            #try except not defined
+            self.main.wFloorDisplay.canvas.image_overlay.set(
+                cmap=cmap, vmin=vmin, vmax=vmax)
         self.main.wFloorDisplay.canvas.draw_idle()
 
     def dose_selections_changed(self):
@@ -1312,7 +1427,7 @@ class CalculateWidget(QWidget):
         self.gb_floor.setLayout(vlo_gb)
         self.btns_floor.button(1).setChecked(True)
 
-        self.working_days = QSpinBox(minimum=0, maximum=1000,
+        self.working_days = QSpinBox(minimum=1, maximum=1000,
                                      value=self.main.general_values.working_days)
         self.working_days.editingFinished.connect(
             self.main.update_dose_days)
@@ -1324,6 +1439,8 @@ class CalculateWidget(QWidget):
         vlo.addLayout(hlo_working_days)
         self.chk_correct_thickness_geometry = QCheckBox(
             'Correct geometrically for material thickness.')
+        self.chk_correct_thickness_geometry.setChecked(
+            self.main.general_values.correct_thickness)
         hlo_correct = QHBoxLayout()
         vlo.addLayout(hlo_correct)
         hlo_correct.addWidget(self.chk_correct_thickness_geometry)
@@ -1432,6 +1549,85 @@ class InputTab(QWidget):
                 self.update_occ_map()
             self.main.reset_dose()
 
+    def get_pos(self):
+        """Get positions for element as defined in figure.
+
+        Assume point - or override this function.
+        """
+        if self.active_row > -1:
+            text = (f'{self.main.gui.x1:.0f}, {self.main.gui.y1:.0f}')
+            tabitem = self.table.cellWidget(self.active_row, 2)
+            tabitem.setText(text)
+            self.table_list[self.active_row][2] = text
+            self.update_source_annotations()
+            self.main.reset_dose()
+
+    def update_source_annotations(self, all_sources=True):
+        """Update annotations for sources.
+
+        Parameters
+        ----------
+        all_sources : bool, optional
+            If true generate all annotations, else only active. The default is True.
+        """
+        canvas = self.main.wFloorDisplay.canvas
+        index_lines = []
+        gid_indexes = []
+        if len(canvas.ax.lines) > 0:
+            for i, line in enumerate(canvas.ax.lines):
+                gid = line.get_gid()
+                gid_split = gid.split('_')
+                if len(gid_split) == 2:
+                    try:
+                        row = int(gid_split[1])
+                        index_lines.append(i)
+                        gid_indexes.append(row)
+                    except ValueError:
+                        pass
+
+        if all_sources:
+            # remove all present source-annotations
+            if len(index_lines) > 0:
+                index_lines.reverse()
+                for i in index_lines:
+                    canvas.ax.lines[i].remove()
+            canvas.reset_hover_pick()
+
+            for i in range(self.table.rowCount()):
+                if self.table_list[i][0]:  # if active
+                    tabitem = self.table.cellWidget(i, 2)
+                    x, y = self.get_pos_from_text(tabitem.text())
+                    canvas.ax.plot(
+                        x, y, 'bo',
+                        markersize=self.main.gui.annotations_markersize[0],
+                        markeredgecolor='red', markeredgewidth=0,
+                        picker=self.main.gui.picker,
+                        gid=f'{self.main.gui.current_tab[:2]}_{i}')
+        else:
+            tabitem = self.table.cellWidget(self.active_row, 2)
+            x, y = self.get_pos_from_text(tabitem.text())
+            if self.active_row not in gid_indexes:  # add
+                canvas.ax.plot(
+                    x, y, 'bo',
+                    markersize=self.main.gui.annotations_markersize[0],
+                    markeredgecolor='red', markeredgewidth=0,
+                    picker=self.main.gui.picker,
+                    gid=f'{self.main.gui.current_tab[:2]}_{i}')
+            else:  # update
+                line_index = index_lines[gid_indexes.index(self.active_row)]
+                canvas.ax.lines[line_index].set_data(x, y)
+
+        self.highlight_selected_in_image()
+
+    def highlight_selected_in_image(self):
+        """Highlight source position in image if positions given."""
+        if self.active_row > -1:
+            tabitem = self.table.cellWidget(self.active_row, 2)
+            x, y = self.get_pos_from_text(tabitem.text())
+            self.main.wFloorDisplay.canvas.sourcepos_highlight()
+        else:
+            self.main.wFloorDisplay.canvas.draw_idle()  # in case of previous changes
+
     def select_row_col(self, row, col):
         """Set focus on selected row and col."""
         index = self.table.model().index(row, col)
@@ -1485,12 +1681,8 @@ class InputTab(QWidget):
                     self.table_list = [copy.deepcopy(self.empty_row)]
                     self.active_row = 0
                 else:
-                    print('table_list before pop')
-                    print(self.table_list)
                     self.table.removeRow(row)
                     self.table_list.pop(row)
-                    print('table_list after pop')
-                    print(self.table_list)
                     self.update_row_number(row, -1)
                 if self.label == 'Areas':
                     self.update_occ_map()
@@ -1744,7 +1936,7 @@ class ScaleTab(InputTab):
                 self.main.gui.x0, self.main.gui.y0)
             self.main.gui.scale_end = (
                 self.main.gui.x1, self.main.gui.y1)
-            if self.main.gui.calibration_factor > 0.:
+            if self.main.gui.calibration_factor:
                 self.update_scale()
 
     def get_scale_from_text(self, text):
@@ -1802,7 +1994,7 @@ class ScaleTab(InputTab):
 
     def update_material_lists(self, first=False):
         """Update selectable lists."""
-        self.material_strings = [x.label for x in self.main.materials]
+        self.material_strings = self.main.general_values.materials
         if first:
             prev_above = self.main.general_values.shield_material_above
             prev_below = self.main.general_values.shield_material_below
@@ -1942,7 +2134,6 @@ class AreasTab(InputTab):
     def update_occ_map(self):
         """Update array containing occupation factors and redraw."""
         # reset occ_map, rectangle annotations and related parameters
-        print('update_occ_map')
         self.main.occ_map = np.ones(self.main.occ_map.shape)
         if len(self.main.wFloorDisplay.canvas.ax.patches) > 0:
             index_patches = []
@@ -1952,23 +2143,18 @@ class AreasTab(InputTab):
                 index_patches.reverse()
                 for i in index_patches:
                     self.main.wFloorDisplay.canvas.ax.patches[i].remove()
-                print(f'remove {index_patches}')
         self.main.wFloorDisplay.canvas.reset_hover_pick()
-        print(f'table_list {self.table_list}')
+
         areas_this = []
-        print('table widgets as list')
-        print(self.get_table_as_list()[1:])
         for i in range(self.table.rowCount()):
             if self.table_list[i][0]:  # if active
                 tabitem = self.table.cellWidget(i, 2)
                 x0, y0, width, height = self.get_area_from_text(tabitem.text())
-                print(x0, y0, width, height)
                 self.main.occ_map[y0:y0+height, x0:x0+width] = self.table_list[i][3]
                 areas_this.append(Rectangle(
                     (x0, y0), width, height, edgecolor='blue',
                     linewidth=self.main.gui.annotations_linethick, fill=False,
                     picker=True, gid=f'{i}'))
-                print(f'add gid {i}')
                 self.main.wFloorDisplay.canvas.ax.add_patch(areas_this[-1])
         self.main.wFloorDisplay.canvas.image_overlay.set_data(self.main.occ_map)
         self.main.wFloorDisplay.canvas.image_overlay.set(
@@ -2042,7 +2228,7 @@ class WallsTab(InputTab):
         self.table.setHorizontalHeaderLabels(
             ['Active', 'Wall name', 'x0,y0,x1,y1', 'Material', 'Thickness (mm)'])
         self.empty_row = [True, '', '', 'Lead', 0.0]
-        self.material_strings = [x.label for x in self.main.materials]
+        self.material_strings = self.main.general_values.materials
         self.table_list = [copy.deepcopy(self.empty_row)]
         self.active_row = 0
         self.table.setColumnWidth(0, 10*self.main.gui.char_width)
@@ -2066,7 +2252,7 @@ class WallsTab(InputTab):
 
     def update_materials(self):
         """Update ComboBox of all rows when list of materials changed in settings."""
-        self.material_strings = [x.label for x in self.main.materials]
+        self.material_strings = self.main.general_values.materials
         warnings = []
         self.blockSignals(True)
         for row in range(self.table.rowCount()):
@@ -2203,20 +2389,20 @@ class NMsourcesTab(InputTab):
                 '   - t1 = when activity reaches this position (hours after t0)<br>'
                 '   - duration = duration of activity at this position (hours)<br>'
                 '   - Rest void = rest fraction after voiding<br>'
-                '   - # pr workday = number of procedures pr working day. '
+                '   - # pr workday = average number of procedures pr working day. '
                 'Dose multiplied with number of working days specified above.'
                 ),
             btn_get_pos_text='Get source coordinates as marked in image')
 
-        self.label = 'NM sources'
+        self.modality = 'NM'
+        self.label = f'{self.modality} sources'
         self.main = main
         self.table.setColumnCount(10)
         self.table.setHorizontalHeaderLabels(
             ['Active', 'Source name', 'x,y', 'Isotope', 'In patient',
-             'A0 (MBq)', 't1 (hours)', 'duration (hours)', 'Rest void',
+             'A0 (MBq)', 't1 (hours)', 'Duration (hours)', 'Rest void',
              '# pr workday'])
-        self.empty_row = [True, '', '', 'F-18', True, '0.0', '0.0', '0.0',
-                          '1.0', '0']
+        self.empty_row = [True, '', '', 'F-18', True, 0.0, 0.0, 0.0, 1.0, 0.0]
         self.isotope_strings = [x.label for x in self.main.isotopes]
         self.table_list = [copy.deepcopy(self.empty_row)]
         self.active_row = 0
@@ -2227,9 +2413,9 @@ class NMsourcesTab(InputTab):
         self.table.setColumnWidth(4, 13*self.main.gui.char_width)
         self.table.setColumnWidth(5, 13*self.main.gui.char_width)
         self.table.setColumnWidth(6, 13*self.main.gui.char_width)
-        self.table.setColumnWidth(7, 17*self.main.gui.char_width)
+        self.table.setColumnWidth(7, 20*self.main.gui.char_width)
         self.table.setColumnWidth(8, 13*self.main.gui.char_width)
-        self.table.setColumnWidth(9, 15*self.main.gui.char_width)
+        self.table.setColumnWidth(9, 17*self.main.gui.char_width)
 
         self.table.verticalHeader().setVisible(False)
         self.add_cell_widgets(0)
@@ -2252,7 +2438,7 @@ class NMsourcesTab(InputTab):
         self.table.setCellWidget(row, 8, uir.CellSpinBox(
             self, initial_value=1., row=row, col=8))
         self.table.setCellWidget(row, 9, uir.CellSpinBox(
-            self, row=row, col=9, max_val=100, step=1, decimals=0))
+            self, row=row, col=9, max_val=100, step=1, decimals=1))
 
     def update_isotopes(self):
         """Update ComboBox of all rows when list of isotopes changed in settings."""
@@ -2260,26 +2446,6 @@ class NMsourcesTab(InputTab):
         for row in range(self.table.rowCount()):
             self.table.setCellWidget(row, 3, uir.CellCombo(
                 self, self.isotope_strings, row=row, col=3))
-
-    def get_pos(self):
-        """Get positions for element as defined in figure."""
-        if self.active_row > -1:
-            text = (
-                f'{self.main.gui.x1:.0f}, '
-                f'{self.main.gui.y1:.0f}'
-                )
-            tabitem = self.table.cellWidget(self.active_row, 2)
-            tabitem.setText(text)
-            self.table_list[self.active_row][2] = text
-            self.highlight_selected_in_image()
-            self.update_NM_dose()
-
-    def highlight_selected_in_image(self):
-        """Highlight source position in image if positions given."""
-        if self.active_row > -1:
-            tabitem = self.table.cellWidget(self.active_row, 2)
-            x, y = self.get_pos_from_text(tabitem.text())
-            self.main.wFloorDisplay.canvas.add_sourcepos_highlight(x, y)
 
     def update_NM_dose(self, update_row=None):
         """Update array containing NM dose and redraw."""
@@ -2297,8 +2463,7 @@ class NMsourcesTab(InputTab):
         """Delete selected row."""
         removed_row = super().delete_row()
         if removed_row > -1:
-            pass
-            # TODO: update floor display
+            self.update_source_annotations()
 
     def add_row(self):
         """Add row after selected row (or as last row if none selected).
@@ -2332,6 +2497,146 @@ class NMsourcesTab(InputTab):
             self.table.cellWidget(added_row, 7).setValue(float(values_above[7]))
             self.table.cellWidget(added_row, 8).setValue(float(values_above[8]))
             self.table.cellWidget(added_row, 9).setValue(int(values_above[9]))
+
+            for i in range(self.table.columnCount()):
+                self.table.cellWidget(added_row, i).blockSignals(False)
+            self.update_row_number(added_row, 1)
+
+            self.select_row_col(added_row, 1)
+            self.table_list[added_row] = copy.deepcopy(values_above)
+            # TODO: change label to one not used yet
+            # TODO: update floor display
+
+
+class CTsourcesTab(InputTab):
+    """GUI for adding/editing NM sources."""
+
+    def __init__(self, main):
+        super().__init__(
+            header='CT sources',
+            info=(
+                'For stray radiation using coronal and sagittal doserate map.<br>'
+                '(Use "kV sources" if isotropic stray radiation.)<br>'
+                '<br>'
+                'Select position of source in floor plan (mouse click).<br>'
+                'Select the row for which you want to set this source position.<br>'
+                'Press the "Get..."-button to fetch the coordinates.<br>'
+                '<br>'
+                'Specify parameters for the sources:<br>'
+                '   - kV source = Select named kV-source as defined in Settings - '
+                'Shield Data<br>'
+                '   - Doserate map'
+                '   - Rotation = rotation of CT footprint, 0 = gantry up on screen<br>'
+                '   - kVp correction = if CT dosemap defined for max kVp, you may '
+                'correct by a effective factor if kVp generally lower<br>'
+                '   - mAs pr patient = total mAs on average pr CT examination<br>'
+                '   - # pr workday = average number of procedures pr working day. '
+                'Dose multiplied with number of working days specified above.'
+                ),
+            btn_get_pos_text='Get source coordinates as marked in image')
+
+        self.modality = 'CT'
+        self.label = f'{self.modality} sources'
+        self.main = main
+        self.table.setColumnCount(10)
+        self.table.setHorizontalHeaderLabels(
+            ['Active', 'Source name', 'x,y', 'kV source', 'Doserate map',
+             'Rotation', 'kVp correction', 'mAs pr patient', '# pr workday'])
+        self.empty_row = [True, '', '', self.main.general_values.kV_sources[0],
+                          'Siemens Edge 140 kVp', 0, 1.0, 4000, 0.0]
+        self.kV_source_strings = self.main.general_values.kV_sources
+        self.ct_doserate_strings = [x.label for x in self.main.ct_doserates]
+        self.table_list = [copy.deepcopy(self.empty_row)]
+        self.active_row = 0
+        self.table.setColumnWidth(0, 10*self.main.gui.char_width)
+        self.table.setColumnWidth(1, 20*self.main.gui.char_width)
+        self.table.setColumnWidth(2, 13*self.main.gui.char_width)
+        self.table.setColumnWidth(3, 20*self.main.gui.char_width)
+        self.table.setColumnWidth(4, 25*self.main.gui.char_width)
+        self.table.setColumnWidth(5, 13*self.main.gui.char_width)
+        self.table.setColumnWidth(6, 19*self.main.gui.char_width)
+        self.table.setColumnWidth(7, 19*self.main.gui.char_width)
+        self.table.setColumnWidth(8, 19*self.main.gui.char_width)
+
+        self.table.verticalHeader().setVisible(False)
+        self.add_cell_widgets(0)
+        self.select_row_col(0, 1)
+
+    def add_cell_widgets(self, row):
+        """Add cell widgets to the selected row (new row, default values)."""
+        self.table.setCellWidget(row, 0, uir.InputCheckBox(self, row=row, col=0))
+        self.table.setCellWidget(row, 1, uir.TextCell(self, row=row, col=1))  # name
+        self.table.setCellWidget(row, 2, uir.TextCell(self, row=row, col=2))  # x,y
+        self.table.setCellWidget(row, 3, uir.CellCombo(
+            self, self.kV_source_strings, row=row, col=3))  # kV source
+        self.table.setCellWidget(row, 4, uir.CellCombo(
+            self, self.ct_doserate_strings, row=row, col=4))  # doserate map
+        self.table.setCellWidget(row, 5, uir.CellSpinBox(
+            self, row=row, col=5, max_val=360, step=45, decimals=0))  # rot
+        self.table.setCellWidget(row, 6, uir.CellSpinBox(
+            self, initial_value=1.,
+            row=row, col=6, max_val=1.0, step=0.1, decimals=2))  # kVp corr
+        self.table.setCellWidget(row, 7, uir.CellSpinBox(
+            self, row=row, col=7, max_val=10000, step=100, decimals=0))  # mAs pr pat
+        self.table.setCellWidget(row, 8, uir.CellSpinBox(
+            self, initial_value=30, row=row, col=8, decimals=0))  # pr workday
+
+    def update_kV_sources(self):
+        """Update ComboBox of all rows when list of kV_sources changed from settings."""
+        self.kV_source_strings = [x.label for x in self.main.general_values.kV_sources]
+        for row in range(self.table.rowCount()):
+            self.table.setCellWidget(row, 3, uir.CellCombo(
+                self, self.kV_source_strings, row=row, col=3))
+
+    def update_CT_dose(self, update_row=None):
+        """Update array containing CT dose and redraw."""
+        # if update_row specific only update this else calculate all (when import)
+        # apply wall shielding for each source
+        # now sum
+        for i in range(self.table.rowCount()):
+            if self.table_list[i][0]:  # if active
+                tabitem = self.table.cellWidget(i, 2)
+                x, y = self.get_pos_from_text(tabitem.text())
+                # TODO ....
+        self.main.wFloorDisplay.canvas.floor_draw()
+
+    def delete_row(self):
+        """Delete selected row."""
+        removed_row = super().delete_row()
+        if removed_row > -1:
+            self.update_source_annotations()
+
+    def add_row(self):
+        """Add row after selected row (or as last row if none selected).
+
+        Returns
+        -------
+        added_row : int
+            index of the new row
+        """
+        added_row = super().add_row()
+        if added_row > -1:
+            self.add_cell_widgets(added_row)
+            # TODO: update floor display
+        return added_row
+
+    def duplicate_row(self):
+        """Duplicate selected row and add as next."""
+        added_row = self.add_row()
+        if added_row > -1:
+            values_above = self.table_list[added_row - 1]
+            for i in range(self.table.columnCount()):
+                self.table.cellWidget(added_row, i).blockSignals(True)
+
+            self.table.cellWidget(added_row, 0).setChecked(values_above[0])
+            self.table.cellWidget(added_row, 1).setText(values_above[1] + '_copy')
+            self.table.cellWidget(added_row, 2).setText(values_above[2])
+            self.table.cellWidget(added_row, 3).setCurrentText(values_above[3])
+            self.table.cellWidget(added_row, 4).setCurrentText(values_above[4])
+            self.table.cellWidget(added_row, 5).setValue(int(values_above[5]))
+            self.table.cellWidget(added_row, 6).setValue(float(values_above[6]))
+            self.table.cellWidget(added_row, 7).setValue(int(values_above[7]))
+            self.table.cellWidget(added_row, 8).setValue(int(values_above[8]))
 
             for i in range(self.table.columnCount()):
                 self.table.cellWidget(added_row, i).blockSignals(False)

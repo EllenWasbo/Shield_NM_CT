@@ -30,14 +30,13 @@ from Shield_NM_CT.scripts.mini_methods_format import valid_template_name
 class StackWidget(QWidget):
     """Class for general widget attributes for the stacked widgets."""
 
-    def __init__(self, dlg_settings=None, header='', subtxt='', temp_alias='template',
+    def __init__(self, main=None, header='', subtxt='', temp_alias='template',
                  temp_list=False, editable=True):
         """Initiate StackWidget.
 
         Parameters
         ----------
-        dlg_settings: QDialog
-            parent of stackWidget
+        main: MainWindow
         header : str
             header text
         subtxt : str
@@ -52,18 +51,12 @@ class StackWidget(QWidget):
             False = hide toolbar for save/edit + hide edited
         """
         super().__init__()
-        self.dlg_settings = dlg_settings
+        self.main = main
         self.temp_alias = temp_alias
         self.temp_list = temp_list
         self.edited = False
         self.lastload = None
         self.templates = None
-        try:
-            self.import_review_mode = self.dlg_settings.import_review_mode
-            self.save_blocked = self.dlg_settings.main.save_blocked
-        except AttributeError:
-            self.import_review_mode = False
-            self.save_blocked = False
         self.status_label = QLabel('')
 
         self.vlo = QVBoxLayout()
@@ -77,8 +70,7 @@ class StackWidget(QWidget):
         if self.temp_list:
             self.hlo = QHBoxLayout()
             self.vlo.addLayout(self.hlo)
-            self.wid_temp_list = TempSelector(
-                self, editable=editable, import_review_mode=self.import_review_mode)
+            self.wid_temp_list = TempSelector(self, editable=editable)
             self.hlo.addWidget(self.wid_temp_list)
 
     def flag_edit(self, flag=True):
@@ -92,20 +84,13 @@ class StackWidget(QWidget):
 
     def update_from_yaml(self, initial_template_label=''):
         """Refresh settings from yaml file."""
-        self.lastload = time()
+        self.lastload = self.main.lastload
 
         if hasattr(self, 'fname'):
-            _, _, self.templates = cff.load_settings(fname=self.fname)
-            # TODO: load also connected templates and fill lists?
-            '''
-            if 'patterns' in self.fname or self.fname == 'auto_templates':
-                _, _, self.tag_infos = cff.load_settings(fname='tag_infos')
-
-            if self.fname in ['auto_templates', 'auto_vendor_templates']:
-                _, _, self.limits_and_plot_templates = cff.load_settings(
-                    fname='limits_and_plot_templates')
-                self.fill_list_limits_and_plot()
-            '''
+            self.templates = getattr(self.main, self.fname)
+            if self.fname == 'shield_data':
+                self.lastload_general_values = self.main.lastload
+                self.fill_list_sources()
 
             if self.temp_list:
                 self.refresh_templist(selected_label=initial_template_label)
@@ -140,36 +125,11 @@ class StackWidget(QWidget):
 
         self.wid_temp_list.list_temps.blockSignals(True)
         self.wid_temp_list.list_temps.clear()
-        if self.import_review_mode:
-            self.refresh_templist_icons()
-        else:
-            self.wid_temp_list.list_temps.addItems(self.current_labels)
+        self.wid_temp_list.list_temps.addItems(self.current_labels)
         self.wid_temp_list.list_temps.setCurrentRow(tempno)
         self.wid_temp_list.list_temps.blockSignals(False)
 
         self.update_data()
-
-    def refresh_templist_icons(self):
-        """Set green if marked for import and red if marked for ignore.
-
-        Used if import review mode.
-        """
-        if hasattr(self, 'marked'):
-            current_marked = self.marked[self.current_modality]
-            current_ignore = self.marked_ignore[self.current_modality]
-        else:
-            current_marked = []
-            current_ignore = []
-
-        for i, label in enumerate(self.current_labels):
-            if i in current_marked:
-                icon = QIcon(f'{os.environ[ENV_ICON_PATH]}ok.png')
-            elif i in current_ignore:
-                icon = QIcon(f'{os.environ[ENV_ICON_PATH]}deleteRed.png')
-            else:
-                icon = QIcon()
-
-            self.wid_temp_list.list_temps.addItem(QListWidgetItem(icon, label))
 
     def update_clicked_template(self):
         """Update data after new template selected (clicked)."""
@@ -254,21 +214,6 @@ class StackWidget(QWidget):
                 self.templates.append(copy.deepcopy(self.current_template))
         self.save()
         self.refresh_templist(selected_label=label)
-
-    def duplicate(self, selected_id, new_label):
-        """Duplicated template.
-
-        Parameters
-        ----------
-        selected_id : int
-            template number in list to duplicate
-        new_label : str
-            verified label of new template
-        """
-        self.templates.append(copy.deepcopy(self.templates[selected_id]))
-        self.templates[-1].label = new_label
-        self.save()
-        self.refresh_templist(selected_label=new_label)
 
     def rename(self, newlabel):
         """Rename selected template."""
@@ -413,13 +358,16 @@ class StackWidget(QWidget):
 class TempSelector(QWidget):
     """Widget with list of templates and toolbar."""
 
-    def __init__(self, parent, editable=True, import_review_mode=False):
+    def __init__(self, parent, editable=True):
         super().__init__()
         self.parent = parent
         self.setFixedWidth(400)
 
         self.vlo = QVBoxLayout()
         self.setLayout(self.vlo)
+        self.vlo_top = QVBoxLayout()
+        self.vlo.addLayout(self.vlo_top)
+
         self.vlo.addWidget(uir.LabelItalic(self.parent.temp_alias.title()+'s'))
         hlo_list = QHBoxLayout()
         self.vlo.addLayout(hlo_list)
@@ -427,61 +375,52 @@ class TempSelector(QWidget):
         self.list_temps.currentItemChanged.connect(self.parent.update_clicked_template)
         hlo_list.addWidget(self.list_temps)
 
-        if import_review_mode:
-            self.toolbar = ToolBarImportIgnore(self, temp_alias=self.parent.temp_alias)
+        if editable:
+            self.toolbar = QToolBar()
+            self.toolbar.setOrientation(Qt.Vertical)
             hlo_list.addWidget(self.toolbar)
-        else:
-            if editable:
-                self.toolbar = QToolBar()
-                self.toolbar.setOrientation(Qt.Vertical)
-                hlo_list.addWidget(self.toolbar)
-                self.act_clear = QAction(
-                    QIcon(f'{os.environ[ENV_ICON_PATH]}clear.png'),
-                    'Clear ' + self.parent.temp_alias + ' (reset to default)', self)
-                self.act_clear.triggered.connect(self.clear)
-                self.act_add = QAction(
-                    QIcon(f'{os.environ[ENV_ICON_PATH]}add.png'),
-                    'Add current values as new ' + self.parent.temp_alias, self)
-                self.act_add.triggered.connect(self.add)
-                self.act_save = QAction(
-                    QIcon(f'{os.environ[ENV_ICON_PATH]}save.png'),
-                    'Save current values to ' + self.parent.temp_alias, self)
-                self.act_save.triggered.connect(self.save)
-                self.act_rename = QAction(
-                    QIcon(f'{os.environ[ENV_ICON_PATH]}rename.png'),
-                    'Rename ' + self.parent.temp_alias, self)
-                self.act_rename.triggered.connect(self.rename)
-                self.act_duplicate = QAction(
-                    QIcon(f'{os.environ[ENV_ICON_PATH]}duplicate.png'),
-                    'Duplicate ' + self.parent.temp_alias, self)
-                self.act_duplicate.triggered.connect(self.duplicate)
-                self.act_up = QAction(
-                    QIcon(f'{os.environ[ENV_ICON_PATH]}moveUp.png'),
-                    'Move up', self)
-                self.act_up.triggered.connect(self.move_up)
-                self.act_down = QAction(
-                    QIcon(f'{os.environ[ENV_ICON_PATH]}moveDown.png'),
-                    'Move down', self)
-                self.act_down.triggered.connect(self.move_down)
-                self.act_delete = QAction(
-                    QIcon(f'{os.environ[ENV_ICON_PATH]}delete.png'),
-                    'Delete ' + self.parent.temp_alias, self)
-                self.act_delete.triggered.connect(self.delete)
+            self.act_clear = QAction(
+                QIcon(f'{os.environ[ENV_ICON_PATH]}clear.png'),
+                'Clear ' + self.parent.temp_alias + ' (reset to default)', self)
+            self.act_clear.triggered.connect(self.clear)
+            self.act_add = QAction(
+                QIcon(f'{os.environ[ENV_ICON_PATH]}add.png'),
+                'Add current values as new ' + self.parent.temp_alias, self)
+            self.act_add.triggered.connect(self.add)
+            self.act_save = QAction(
+                QIcon(f'{os.environ[ENV_ICON_PATH]}save.png'),
+                'Save current values to ' + self.parent.temp_alias, self)
+            self.act_save.triggered.connect(self.save)
+            self.act_rename = QAction(
+                QIcon(f'{os.environ[ENV_ICON_PATH]}rename.png'),
+                'Rename ' + self.parent.temp_alias, self)
+            self.act_rename.triggered.connect(self.rename)
+            self.act_up = QAction(
+                QIcon(f'{os.environ[ENV_ICON_PATH]}moveUp.png'),
+                'Move up', self)
+            self.act_up.triggered.connect(self.move_up)
+            self.act_down = QAction(
+                QIcon(f'{os.environ[ENV_ICON_PATH]}moveDown.png'),
+                'Move down', self)
+            self.act_down.triggered.connect(self.move_down)
+            self.act_delete = QAction(
+                QIcon(f'{os.environ[ENV_ICON_PATH]}delete.png'),
+                'Delete ' + self.parent.temp_alias, self)
+            self.act_delete.triggered.connect(self.delete)
 
-                if self.parent.save_blocked:
-                    self.act_clear.setEnabled(False)
-                    self.act_add.setEnabled(False)
-                    self.act_save.setEnabled(False)
-                    self.act_duplicate.setEnabled(False)
-                    self.act_rename.setEnabled(False)
-                    self.act_up.setEnabled(False)
-                    self.act_down.setEnabled(False)
-                    self.act_delete.setEnabled(False)
+            if self.parent.main.save_blocked:
+                self.act_clear.setEnabled(False)
+                self.act_add.setEnabled(False)
+                self.act_save.setEnabled(False)
+                self.act_rename.setEnabled(False)
+                self.act_up.setEnabled(False)
+                self.act_down.setEnabled(False)
+                self.act_delete.setEnabled(False)
 
-                self.toolbar.addActions(
-                    [self.act_clear, self.act_add, self.act_save, self.act_duplicate,
-                     self.act_rename, self.act_up,
-                     self.act_down, self.act_delete])
+            self.toolbar.addActions(
+                [self.act_clear, self.act_add, self.act_save,
+                 self.act_rename, self.act_up,
+                 self.act_down, self.act_delete])
 
     def keyPressEvent(self, event):
         """Accept Delete and arrow up/down key on list templates."""
@@ -544,17 +483,18 @@ class TempSelector(QWidget):
                 'No template to rename.')
         else:
             proceed = True
-            if self.parent.edited:
-                res = messageboxes.QuestionBox(
-                    parent=self, title='Rename edited?',
-                    msg='''Selected template has changed.
-                    Save changes before rename?''',
-                    yes_text='Yes',
-                    no_text='Cancel')
-                if res.exec():
-                    self.save()
-                else:
-                    proceed = False
+            if self.parent.fname != 'shield_data':
+                if self.parent.edited:
+                    res = messageboxes.QuestionBox(
+                        parent=self, title='Rename edited?',
+                        msg='''Selected template has changed.
+                        Save changes before rename?''',
+                        yes_text='Yes',
+                        no_text='Cancel')
+                    if res.exec():
+                        self.save()
+                    else:
+                        proceed = False
 
             if proceed:
                 sel = self.list_temps.currentItem()
@@ -573,43 +513,6 @@ class TempSelector(QWidget):
                                 'This name is already in use.')
                         else:
                             self.parent.rename(text)
-
-    def duplicate(self):
-        """Duplicate template."""
-        if self.parent.current_labels[0] == '':
-            QMessageBox.warning(
-                self, 'Empty list',
-                'No template to duplicate.')
-        else:
-            proceed = True
-            if self.parent.edited:
-                res = messageboxes.QuestionBox(
-                    parent=self, title='Duplicate or add edited?',
-                    msg='''Selected template has changed.
-                    Add with current parameters or duplicate original?''',
-                    yes_text='Add new with current parameter',
-                    no_text='Duplicate original')
-                if res.exec():
-                    self.add()
-                    proceed = False
-
-            if proceed:  # duplicate original
-                sel = self.list_temps.currentItem()
-                current_text = sel.text()
-                duplicate_id = self.parent.current_labels.index(current_text)
-
-                text, proceed = QInputDialog.getText(
-                    self, 'New name',
-                    'Name the new ' + self.parent.temp_alias + '                      ',
-                    text=f'{current_text}_')
-                text = valid_template_name(text)
-                if proceed and text != '':
-                    if text in self.parent.current_labels:
-                        QMessageBox.warning(
-                            self, 'Name already in use',
-                            'This name is already in use.')
-                    else:
-                        self.parent.duplicate(duplicate_id, text)
 
     def move_up(self):
         """Move template up if possible."""
@@ -636,110 +539,10 @@ class TempSelector(QWidget):
                 self, 'Empty list',
                 'No template to delete.')
         else:
-            qtext = ''
-            if hasattr(self.parent, 'list_used_in'):
-                if self.parent.list_used_in.count() > 0:
-                    qtext = ' and all links to automation templates'
-
-            if confirmed is False:
-                res = QMessageBox.question(
-                    self, 'Delete?', f'Delete selected template{qtext}?',
-                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-                if res == QMessageBox.Yes:
-                    confirmed = True
+            res = QMessageBox.question(
+                self, 'Delete?', f'Delete selected {self.parent.temp_alias}?',
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if res == QMessageBox.Yes:
+                confirmed = True
             if confirmed:
-                row = self.list_temps.currentRow()
-                if row < len(self.parent.current_labels):
-                    self.parent.templates.pop(row)
-                    if len(self.parent.templates) == 0:
-                        self.parent.set_empty_template()
-
-                    # also reset link to auto_templates
-                    if qtext != '':
-                        type_vendor = False
-                        if self.parent.fname == 'limits_and_plot_templates':
-                            type_vendor = self.parent.current_template.type_vendor
-                        if type_vendor:
-                            auto_labels = [
-                                self.parent.list_used_in.item(i).text() for i
-                                in range(self.parent.list_used_in.count())]
-                            for temp in self.parent.auto_vendor_templates[
-                                    self.parent.current_modality]:
-                                if temp.label in auto_labels:
-                                    temp.limits_and_plot_label = ''
-                            auto_widget =\
-                                self.parent.dlg_settings.widget_auto_vendor_templates
-                            auto_widget.templates = copy.deepcopy(
-                                self.parent.auto_vendor_templates)
-                        else:
-                            auto_labels = [
-                                self.parent.list_used_in.item(i).text() for i
-                                in range(self.parent.list_used_in.count())]
-                            for temp in self.parent.auto_templates[
-                                    self.parent.current_modality]:
-                                if temp.label in auto_labels:
-                                    if self.parent.fname == 'quicktest_templates':
-                                        temp.quicktemp_label = ''
-                                    elif self.parent.fname == 'limits_and_plot_templates':
-                                        temp.limits_and_plot_label = ''
-                                    else:
-                                        temp.paramset_label = ''
-                            auto_widget = self.parent.dlg_settings.widget_auto_templates
-                            auto_widget.templates = copy.deepcopy(
-                                self.parent.auto_templates)
-
-                        auto_widget.lastload = self.parent.lastload
-                        auto_widget.save()
-
-                    self.parent.save()
-                    self.parent.refresh_templist(selected_id=row-1)
-
-    def mark_import(self, ignore=False):
-        """If import review mode: Mark template for import or ignore."""
-        if not hasattr(self.parent, 'marked'):  # initiate
-            empty = []
-            self.parent.marked_ignore = empty
-            self.parent.marked = copy.deepcopy(empty)
-
-        row = self.list_temps.currentRow()
-        if ignore:
-            if row not in self.parent.marked_ignore:
-                self.parent.marked_ignore.append(row)
-            if row in self.parent.marked:
-                self.parent.marked.remove(row)
-        else:
-            if row not in self.parent.marked:
-                self.parent.marked.append(row)
-            if row in self.parent.marked_ignore:
-                self.parent.marked_ignore.remove(row)
-
-        self.parent.refresh_templist(selected_id=row)
-
-
-class ToolBarImportIgnore(QToolBar):
-    """Toolbar with import or ignore buttons for import mode of dlg_settings."""
-
-    def __init__(self, parent, temp_alias='template', orientation=Qt.Vertical):
-        """Initiate toolbar.
-
-        Parameters
-        ----------
-        parent: widget with class method 'mark_import'
-        temp_alias : str
-            string to set type of data (parameterset or template)
-        orientation: Qt.Vertical/Horizontal
-            Default is Qt.Vertical
-        """
-        super().__init__()
-        self.setOrientation(orientation)
-        self.act_import = QAction(
-            QIcon(f'{os.environ[ENV_ICON_PATH]}ok.png'),
-            'Mark ' + temp_alias + ' for import', parent)
-        self.act_import.triggered.connect(parent.mark_import)
-        self.act_ignore = QAction(
-            QIcon(f'{os.environ[ENV_ICON_PATH]}deleteRed.png'),
-            'Mark ' + temp_alias + ' to ignore', parent)
-        self.act_ignore.triggered.connect(
-            lambda: parent.mark_import(ignore=True))
-
-        self.addActions([self.act_import, self.act_ignore])
+                self.parent.delete()
