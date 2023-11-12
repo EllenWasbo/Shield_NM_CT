@@ -52,6 +52,8 @@ class GeneralValues:
     shield_material_below: str = 'Concrete'
     materials: list[str] = field(default_factory=lambda: ['Lead', 'Concrete'])
     kV_sources: list[str] = field(default_factory=lambda: ['CT 120 kVp', 'CT 140 kVp'])
+    csv_separator: str = ';'
+    csv_decimal: str = ','
 
 
 @dataclass

@@ -30,10 +30,15 @@ ENV_ICON_PATH = 'SHIELD_NM_CT_ICON_PATH'
 USER_PREFS_FNAME = 'user_preferences.yaml'
 
 ANNOTATION_OPTIONS = ['Scale', 'Areas', 'Walls', 'Wall thickness',
-                   'NM sources', 'CT sources', 'Other sources', 'Verification points']
+                   'NM sources', 'CT sources', 'Other sources',
+                   'Verification points']
 # same as Tab label where this should be used to test whether to force display
 
 CONFIG_FNAMES = {
+    'general_values': {
+        'saved_as': 'object',
+        'default': cfc.GeneralValues(),
+        },
     'isotopes': {
         'saved_as': 'object_list',
         'default': shield_constants_functions.read_yaml(fname='isotopes')
@@ -45,14 +50,6 @@ CONFIG_FNAMES = {
     'shield_data': {
         'saved_as': 'object_list',
         'default': shield_constants_functions.read_yaml(fname='shield_data')
-        },
-    'materials': {
-        'saved_as': 'object_list',
-        'default': shield_constants_functions.read_yaml(fname='materials')
-        },
-    'general_values': {
-        'saved_as': 'object',
-        'default': cfc.GeneralValues(),
         },
     'active_users': {
         'saved_as': 'dict',
