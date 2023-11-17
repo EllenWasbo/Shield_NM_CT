@@ -1,0 +1,10 @@
+label: Lead
+color: '#0000bb'
+default_thickness: 2.0
+real_thickness: False
+---
+label: Concrete
+color: '#555555'
+default_thickness: 200.0
+real_thickness: True
+---

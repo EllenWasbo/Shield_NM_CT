@@ -33,6 +33,8 @@ def read_yaml(fname=''):
             if doc is not None:
                 if fname == 'isotopes':
                     settings.append(cfc.Isotope(**doc))
+                elif fname == 'materials':
+                    settings.append(cfc.Material(**doc))
                 elif fname == 'ct_doserates':
                     settings.append(cfc.CT_doserates(**doc))
                 elif fname == 'shield_data':

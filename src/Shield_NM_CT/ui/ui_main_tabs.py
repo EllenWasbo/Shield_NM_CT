@@ -112,6 +112,17 @@ class InputTab(QWidget):
         if col != 1:  # name
             if self.label == 'Areas':
                 self.update_occ_map()
+            elif self.label == 'Walls':
+                if col == 3:  # material label
+                    # set default material thickness?
+                    # curr_thickness = self.get_cell_value(row, 4)
+                    w = self.table.cellWidget(row, 4)
+                    thickness = self.get_default_thickness_from_material(value)
+                    w.blockSignals(True)  # avoid update annotations twice
+                    w.setValue(thickness)
+                    self.table_list[row][4] = thickness
+                    w.blockSignals(False)
+                self.update_current_wall_annotation()
             elif 'source' in self.label or 'point' in self.label:
                 self.update_current_source_annotation()
             self.main.reset_dose()
@@ -333,6 +344,8 @@ class InputTab(QWidget):
             content = w.isChecked()
         elif hasattr(w, 'setText'):
             content = w.text()
+        elif hasattr(w, 'setCurrentText'):
+            content = w.currentText()
         elif hasattr(w, 'setValue'):
             content = w.value()
         else:
@@ -437,6 +450,9 @@ class InputTab(QWidget):
                         elif hasattr(w, 'setText'):
                             val = str(df.iat[row, col])
                             w.setText(val)
+                        elif hasattr(w, 'setCurrentText'):
+                            val = str(df.iat[row, col])
+                            w.setCurrentText(val)
                         elif hasattr(w, 'setValue'):
                             val = float(df.iat[row, col])
                             w.setValue(val)
@@ -591,13 +607,14 @@ class ScaleTab(InputTab):
         """Update calibration factor."""
         tabitem = self.table.cellWidget(0, 0)
         x0, y0, x1, y1 = self.get_scale_from_text(tabitem.text())
-        lineLen = np.sqrt((x1-x0)**2 + (y1-y0)**2)
-        self.main.gui.calibration_factor = (
-            self.main.gui.scale_length / lineLen)
-        self.main.wFloorDisplay.canvas.add_scale_highlight(
-            x0, y0, x1, y1)
-        self.main.CTsources_tab.update_source_annotations()
-        # TODO self.main.update_dose()
+        line_length = np.sqrt((x1-x0)**2 + (y1-y0)**2)
+        if line_length > 0:
+            self.main.gui.calibration_factor = (
+                self.main.gui.scale_length / line_length)
+            self.main.wFloorDisplay.canvas.add_scale_highlight(
+                x0, y0, x1, y1)
+            self.main.CTsources_tab.update_source_annotations()
+            # TODO self.main.update_dose()
 
     def update_heights(self):
         """Update floor heights."""
@@ -613,7 +630,7 @@ class ScaleTab(InputTab):
 
     def update_material_lists(self, first=False):
         """Update selectable lists."""
-        self.material_strings = self.main.general_values.materials
+        self.material_strings = [x.label for x in self.main.materials]
         if first:
             prev_above = self.main.general_values.shield_material_above
             prev_below = self.main.general_values.shield_material_below
@@ -846,8 +863,11 @@ class WallsTab(InputTab):
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(
             ['Active', 'Wall name', 'x0,y0,x1,y1', 'Material', 'Thickness (mm)'])
-        self.empty_row = [True, '', '', 'Lead', 0.0]
-        self.material_strings = self.main.general_values.materials
+        mat = self.main.materials[0].label
+        self.empty_row = [True, '', '',
+                          self.main.materials[0].label,
+                          self.main.materials[0].default_thickness]
+        self.material_strings = [x.label for x in self.main.materials]
         self.table_list = [copy.deepcopy(self.empty_row)]
         self.active_row = 0
         self.table.setColumnWidth(0, 10*self.main.gui.char_width)
@@ -867,11 +887,12 @@ class WallsTab(InputTab):
         self.table.setCellWidget(row, 3, uir.CellCombo(
             self, self.material_strings, row=row, col=3))
         self.table.setCellWidget(row, 4, uir.CellSpinBox(
-            self, row=row, col=4, max_val=400., step=1.0))
+            self, initial_value = self.empty_row[4],
+            row=row, col=4, max_val=400., step=1.0))
 
     def update_materials(self):
         """Update ComboBox of all rows when list of materials changed in settings."""
-        self.material_strings = self.main.general_values.materials
+        self.material_strings = [x.label for x in self.main.materials]
         warnings = []
         self.blockSignals(True)
         for row in range(self.table.rowCount()):
@@ -906,10 +927,13 @@ class WallsTab(InputTab):
                 f'{self.main.gui.y1:.0f}'
                 )
             tabitem = self.table.cellWidget(self.active_row, 2)
-            tabitem.setText(text)
-            self.table_list[self.active_row][2] = text
-            self.update_wall_annotations()
-            self.main.reset_dose()
+            try:
+                tabitem.setText(text)
+                self.table_list[self.active_row][2] = text
+                self.update_wall_annotations()
+                self.main.reset_dose()
+            except:
+                self.select_row_col(0, 0)
 
     def get_wall_from_text(self, text):
         """Get coordinate string for wall.
@@ -941,6 +965,125 @@ class WallsTab(InputTab):
 
         return (x0, y0, x1, y1)
 
+    def get_color_from_material(self, material):
+        """Return color for given material label.
+
+        Parameters
+        ----------
+        material : str
+            material label.
+
+        Returns
+        -------
+        color : str
+            named color or #rrggbb
+        """
+        color = ''
+        for x in self.main.materials:
+            if x.label == material:
+                color = x.color
+                break
+        return color
+
+    def get_default_thickness_from_material(self, material):
+        """Return default_thickness for given material label.
+
+        Parameters
+        ----------
+        material : str
+            material label.
+
+        Returns
+        -------
+        default_thickness : float
+        """
+        default_thickness = 0.
+        for x in self.main.materials:
+            if x.label == material:
+                default_thickness = x.default_thickness
+                break
+        return default_thickness
+
+    def get_linewidth(self, material, thickness):
+        """Return linewidth in pixels for given settings on material.
+
+        Parameters
+        ----------
+        material : str
+            material label
+        thickness : float
+            material thickness in mm
+
+        Returns
+        -------
+        linewidth : float
+        """
+        linewidth = self.main.gui.annotations_linethick
+        if self.main.gui.calibration_factor is not None:
+            canvas = self.main.wFloorDisplay.canvas
+            xlim = canvas.ax.get_xlim()
+            ylim = canvas.ax.get_ylim()
+            dx, dy = np.ptp(xlim), np.ptp(ylim)
+            size_inches = (canvas.fig.get_figwidth(), canvas.fig.get_figheight())
+            size_points = 72 * np.array(size_inches)  # canvas.fig.dpi or 72?
+            points_pr_pixel = size_points / np.array((dx, dy))
+            points_pr_mm = (
+                0.001 * np.min(points_pr_pixel) / self.main.gui.calibration_factor)
+
+            for x in self.main.materials:
+                if x.label == material:
+                    if x.real_thickness:
+                        real_linewidth = (
+                            thickness * points_pr_mm)
+                        if real_linewidth > linewidth:
+                            linewidth = float(real_linewidth)
+                    break
+
+        return linewidth
+
+    def update_current_wall_annotation(self):
+        """Update annotations for active wall."""
+        tabitem = self.table.cellWidget(self.active_row, 2)
+        x0, y0, x1, y1 = self.get_wall_from_text(tabitem.text())
+
+        canvas = self.main.wFloorDisplay.canvas
+        line_index = None
+        for i, line in enumerate(canvas.ax.lines):
+            try:
+                row = int(line.get_gid())
+                if row == self.active_row:
+                    line_index = i
+                    break
+            except ValueError:
+                pass
+
+        if any([
+                x0, x1, y0, y1,
+                self.table.cellWidget(self.active_row, 0).isChecked()]):
+            material = self.table.cellWidget(self.active_row, 3).currentText()
+            color = self.get_color_from_material(material)
+            linewidth = self.get_linewidth(
+                material, self.table.cellWidget(self.active_row, 4).value())
+            if line_index is None:  # add
+                canvas.ax.plot(
+                    [x0, x1], [y0, y1],
+                    linestyle='-', marker='o', fillstyle='none', solid_capstyle='butt',
+                    linewidth=linewidth, color=color,
+                    markersize=self.main.gui.annotations_markersize[0],
+                    markeredgecolor='blue', markeredgewidth=0,
+                    picker=self.main.gui.picker,
+                    gid=f'{i}')
+                self.highlight_selected_in_image()
+            else:  # update
+                canvas.ax.lines[line_index].set_data([x0, x1], [y0, y1])
+                canvas.ax.lines[line_index].set_linewidth = linewidth
+                canvas.ax.lines[line_index].set_color = color
+                canvas.draw()
+        else:
+            if line_index is not None:
+                canvas.ax.lines[line_index].remove()
+                canvas.draw_idle()
+
     def update_wall_annotations(self):
         """Update annotations for walls."""
         canvas = self.main.wFloorDisplay.canvas
@@ -966,9 +1109,14 @@ class WallsTab(InputTab):
             if self.table_list[i][0]:  # if active
                 tabitem = self.table.cellWidget(i, 2)
                 x0, y0, x1, y1 = self.get_wall_from_text(tabitem.text())
+                material = self.table.cellWidget(i, 3).currentText()
+                color = self.get_color_from_material(material)
+                linewidth = self.get_linewidth(
+                    material, self.table.cellWidget(i, 4).value())
                 canvas.ax.plot(
-                    [x0, x1], [y0, y1], 'bo-', fillstyle='none',
-                    linewidth=self.main.gui.annotations_linethick,
+                    [x0, x1], [y0, y1],
+                    linestyle='-', marker='o', fillstyle='none', solid_capstyle='butt',
+                    linewidth=linewidth, color=color,
                     markersize=self.main.gui.annotations_markersize[0],
                     markeredgecolor='blue', markeredgewidth=0,
                     picker=self.main.gui.picker,
@@ -1016,7 +1164,7 @@ class WallsTab(InputTab):
             self.table.cellWidget(added_row, 1).setText(values_above[1] + '_copy')
             self.table.cellWidget(added_row, 2).setText(values_above[2])
             self.table.cellWidget(added_row, 3).setCurrentText(values_above[3])
-            self.table.cellWidget(added_row, 3).setValue(float(values_above[3]))
+            self.table.cellWidget(added_row, 4).setValue(float(values_above[4]))
 
             for i in range(self.table.columnCount()):
                 self.table.cellWidget(added_row, i).blockSignals(False)

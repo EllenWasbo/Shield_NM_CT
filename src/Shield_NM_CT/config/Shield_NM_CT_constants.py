@@ -43,6 +43,10 @@ CONFIG_FNAMES = {
         'saved_as': 'object_list',
         'default': shield_constants_functions.read_yaml(fname='isotopes')
         },
+    'materials': {
+        'saved_as': 'object_list',
+        'default': shield_constants_functions.read_yaml(fname='materials')
+        },
     'ct_doserates': {
         'saved_as': 'object_list',
         'default': shield_constants_functions.read_yaml(fname='ct_doserates')

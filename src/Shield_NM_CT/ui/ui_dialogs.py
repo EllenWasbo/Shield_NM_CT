@@ -299,7 +299,7 @@ class EditAnnotationsDialog(ShieldDialog):
         fLO.addRow(self.chk_annotations)
 
         self.spin_line = QSpinBox()
-        self.spin_line.setRange(1, 10)
+        self.spin_line.setRange(1, 100)
         self.spin_line.setValue(annotations_linethick)
         if self.canvas:
             self.spin_line.valueChanged.connect(

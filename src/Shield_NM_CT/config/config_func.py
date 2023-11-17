@@ -377,6 +377,9 @@ def load_settings(fname='', temp_config_folder=''):
                             if fname == 'isotopes':
                                 updated_doc = verify_input_dict(doc, cfc.Isotope())
                                 settings.append(cfc.Isotope(**updated_doc))
+                            elif fname == 'materials':
+                                updated_doc = verify_input_dict(doc, cfc.Material())
+                                settings.append(cfc.Material(**updated_doc))
                             elif fname == 'shield_data':
                                 updated_doc = verify_input_dict(doc, cfc.ShieldData())
                                 settings.append(cfc.ShieldData(**updated_doc))

@@ -12,8 +12,8 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QToolBar,
-    QLabel, QPushButton, QButtonGroup, QRadioButton, QAction,
-    QComboBox, QDoubleSpinBox, QInputDialog,
+    QLabel, QPushButton, QButtonGroup, QRadioButton, QAction, QCheckBox,
+    QComboBox, QDoubleSpinBox, QInputDialog, QColorDialog,
     QMessageBox
     )
 
@@ -101,6 +101,78 @@ class IsotopeWidget(StackWidget):
         # not possible if used in shield data
 
 
+class MaterialWidget(StackWidget):
+    """Material settings."""
+
+    def __init__(self, main):
+        header = 'Materials'
+        subtxt = ''
+        super().__init__(main, header, subtxt,
+                         temp_list=True, temp_alias='material')
+        self.fname = 'materials'
+        self.empty_template = cfc.Material()
+
+        self.color_label = QLabel('    ')
+        btn_color = QPushButton('Change color')
+        btn_color.clicked.connect(self.change_color)
+        self.default_thickness = QDoubleSpinBox(minimum=0, maximum=1000., decimals=1)
+        self.default_thickness.valueChanged.connect(lambda: self.flag_edit(True))
+        self.real_thickness = QCheckBox('Show real dimension (if more than 1 pixel)')
+        self.real_thickness.clicked.connect(lambda: self.flag_edit(True))
+
+        self.wid_temp = QWidget(self)
+        self.hlo.addWidget(self.wid_temp)
+        self.vlo_temp = QVBoxLayout()
+        self.wid_temp.setLayout(self.vlo_temp)
+
+        hlo_color = QHBoxLayout()
+        self.vlo_temp.addLayout(hlo_color)
+        hlo_color.addWidget(QLabel('Wall color:'))
+        hlo_color.addWidget(self.color_label)
+        hlo_color.addWidget(btn_color)
+        hlo_color.addStretch()
+
+        hlo_default = QHBoxLayout()
+        self.vlo_temp.addLayout(hlo_default)
+        hlo_default.addWidget(QLabel(
+            'Default wall thickness when material selected:'))
+        hlo_default.addWidget(self.default_thickness)
+        hlo_default.addWidget(QLabel('mm'))
+        hlo_default.addStretch()
+
+        self.vlo_temp.addWidget(self.real_thickness)
+        self.vlo_temp.addStretch()
+
+        self.vlo.addWidget(uir.HLine())
+        self.vlo.addWidget(self.status_label)
+
+    def update_data(self):
+        """Refresh GUI after selecting template."""
+        self.color_label.setStyleSheet(
+            f'QLabel{{background-color: {self.current_template.color};}}')
+        self.default_thickness.setValue(self.current_template.default_thickness)
+        self.real_thickness.setChecked(self.current_template.real_thickness)
+        self.flag_edit(False)
+
+    def get_current_template(self):
+        """Get self.current_template where not dynamically set."""
+        self.current_template.default_thickness = self.default_thickness.value()
+        self.current_template.real_thickness = self.real_thickness.isChecked()
+
+    def change_color(self):
+        """Open dialog to select color."""
+        color = QColorDialog.getColor()
+        if color.isValid():
+            self.current_template.color = color.name()
+            self.flag_edit(True)
+            self.color_label.setStyleSheet(
+                f'QLabel{{background-color: {self.current_template.color};}}')
+
+    def delete(self):
+        """After verifying at will."""
+        # not possible if used in shield data
+
+
 class ShieldDataWidget(StackWidget):
     """ShieldData settings."""
 
@@ -113,8 +185,7 @@ class ShieldDataWidget(StackWidget):
             'Else tenth value layer (TVL) is used to calculate the transmission. '
             'The method of TVL1 and TVL2 is described in [XXXX the candian ref XXXX].'
             )
-        super().__init__(main, header, subtxt,
-                         temp_list=True, temp_alias='material')
+        super().__init__(main, header, subtxt, temp_list=True, temp_alias='material')
         self.fname = 'shield_data'
         self.empty_template = cfc.ShieldData()
 
@@ -159,8 +230,7 @@ class ShieldDataWidget(StackWidget):
         self.act_delete_kV_source = QAction(
             QIcon(f'{os.environ[ENV_ICON_PATH]}delete.png'),
             'Delete kV source', self)
-        self.act_delete_kV_source.triggered.connect(
-            lambda: self.delete(type_delete='kV_source'))
+        self.act_delete_kV_source.triggered.connect(self.delete_kV_source)
 
         if self.main.save_blocked:
             self.act_add_kV_source.setEnabled(False)
@@ -178,11 +248,7 @@ class ShieldDataWidget(StackWidget):
         hlo_sources.addWidget(self.cbox_sources)
         hlo_sources.addWidget(self.toolbar_kV_source)
 
-        # list of materials as template list in TempSelector
-        self.wid_temp_list.toolbar.removeAction(self.wid_temp_list.act_save)
-        self.wid_temp_list.toolbar.removeAction(self.wid_temp_list.act_up)
-        self.wid_temp_list.toolbar.removeAction(self.wid_temp_list.act_down)
-        self.wid_temp_list.act_add.setToolTip('Add material')
+        self.wid_temp_list.toolbar.setVisible(False)
 
         btn_save = QPushButton('Save')
         btn_save.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}save.png'))
@@ -235,7 +301,7 @@ class ShieldDataWidget(StackWidget):
             The default is ''.
         """
         # show list of materials with bold font for those defined for current source
-        self.current_labels = self.main.general_values.materials
+        self.current_labels = [x.label for x in self.main.materials]
         curr_source_is_isotope = self.btns_source_type.button(0).isChecked()
         curr_source = self.cbox_sources.currentText()
         if curr_source_is_isotope:
@@ -360,29 +426,6 @@ class ShieldDataWidget(StackWidget):
             self.lastload_general_values = time()
             self.lastload = time()
 
-    def add(self, label, type_add='material'):
-        """Add material or kV_source.
-
-        DO NOT CHANGE METHOD NAME, overrides add in StackWidget.
-        """
-        ok_save = self.verify_save('general_values', self.lastload_general_values)
-        if ok_save:
-            if type_add == 'material':
-                self.main.general_values.materials.append(label)
-            elif type_add == 'kV_source':
-                self.main.general_values.kV_source.append(label)
-            ok_save, path = cff.save_settings(
-                self.main.general_values, fname='general_values')
-            if ok_save:
-                self.lastload_general_values = time()
-            else:
-                QMessageBox.warning(
-                    self, f'Failed saving new {type_add}', f'Failed saving to {path}')
-            if type_add == 'material':
-                self.refresh_templist(selected_label=label)
-            elif type_add == 'kV_source':
-                self.cbox_sources.setCurrentText(label)
-
     def add_kV_source(self):
         """Add kV source."""
         text, proceed = QInputDialog.getText(
@@ -396,73 +439,66 @@ class ShieldDataWidget(StackWidget):
                     self, 'Name already in use',
                     'This name is already in use.')
             else:
-                self.add(text, type_add='kV_source')
-
-    def rename(self, label, type_rename='material'):
-        """Rename material or kV_source.
-
-        DO NOT CHANGE METHOD NAME, overrides rename in StackWidget.
-        """
-        ok_save1 = self.verify_save('general_values', self.lastload_general_values)
-        ok_save2 = self.verify_save(self.fname, self.lastload)
-        if ok_save1 and ok_save2:
-            if type_rename == 'material':
-                # replace label in general_values, shield_data
-                sel = self.wid_temp_list.list_temps.currentIndex()
-                self.main.general_values.materials[sel.row()] = label
-                for temp in self.main.shield_data:
-                    if temp.material == sel.text():
-                        temp.material = label
-                breakpoint()  # did self.main.shield_data get the new material labels?
-            elif type_rename == 'kV_source':
-                row = self.cbox_sources.currentIndex()
-                self.main.general_values.kV_sources[row] = label
-                for temp in self.main.shield_data:
-                    if temp.kV_source == sel.text():
-                        temp.kV_source = label
-
-            self.save_general_and_shield_data()
-            self.refresh_templist(selected_label=label)
+                ok_save = self.verify_save(
+                    'general_values', self.lastload_general_values)
+                if ok_save:
+                    self.main.general_values.kV_source.append(text)
+                    ok_save, path = cff.save_settings(
+                        self.main.general_values, fname='general_values')
+                    if ok_save:
+                        self.lastload_general_values = time()
+                        self.cbox_sources.addItem(text)
+                        self.cbox_sources.setCurrentText(text)
+                    else:
+                        QMessageBox.warning(
+                            self, f'Failed saving new kV source',
+                            f'Failed saving to {path}')
 
     def rename_kV_source(self):
         """Rename current kV_source. Ask for new name and verify."""
         if len(self.main.general_values.kV_sources) == 0:
             QMessageBox.warning(self, 'Empty list', 'No kV source to rename.')
         else:
-            sel = self.cbox_sources.currentItem()
-            if sel is not None:
-                current_text = sel.text()
-                text, proceed = QInputDialog.getText(
-                    self, 'New name',
-                    'Rename kV_source                      ', text=current_text)
-                text = valid_template_name(text)
-                if proceed and text != '' and current_text != text:
-                    if text in self.main.general_values.kV_sources:
-                        QMessageBox.warning(
-                            self, 'Name already in use',
-                            'This name is already in use.')
-                    else:
-                        self.rename(text, type_rename='kV_source')
+            current_text = self.cbox_sources.currentText()
+            text, proceed = QInputDialog.getText(
+                self, 'New name',
+                'Rename kV_source                      ',
+                text=current_text)
+            text = valid_template_name(text)
+            if proceed and text != '' and current_text != text:
+                if text in self.main.general_values.kV_sources:
+                    QMessageBox.warning(
+                        self, 'Name already in use',
+                        'This name is already in use.')
+                else:
+                    ok_save1 = self.verify_save(
+                        'general_values', self.lastload_general_values)
+                    ok_save2 = self.verify_save(
+                        self.fname, self.lastload)
+                    if ok_save1 and ok_save2:
+                        row = self.cbox_sources.currentIndex()
+                        self.main.general_values.kV_sources[row] = text
+                        for temp in self.main.shield_data:
+                            if temp.kV_source == row.text():
+                                temp.kV_source = text
 
-    def delete(self, type_delete='material'):
-        """Delete material or kV_source."""
+                        self.save_general_and_shield_data()
+                        self.refresh_templist(selected_label=text)
+
+    def delete_kV_source(self):
+        """Delete kV_source."""
         ok_save1 = self.verify_save('general_values', self.lastload_general_values)
         ok_save2 = self.verify_save(self.fname, self.lastload)
         if ok_save1 and ok_save2:
-            current_value = (self.current_template.kV_source
-                             if type_delete == 'kV_source' else
-                             self.current_template.material)
-            used = [getattr(x, type_delete) for x in self.templates]
+            current_value = self.current_template.kV_source
+            used = [x.kV_source for x in self.templates]
 
             proceed = True
             if current_value in used:
                 proceed = messageboxes.proceed_question(
-                    self, f'Delete {type_delete} and related shield data?')
+                    self, 'Delete kV source and related shield data?')
             if proceed:
-                if type_delete == 'material':
-                    self.main.general_values.materials.remove(current_value)
-                else:
-                    self.main.general_values.kV_sources.remove(current_value)
+                self.main.general_values.kV_sources.remove(current_value)
                 idxs_used_current = [
                     i for i, val in enumerate(used) if val == current_value]
                 idxs_used_current.reverse()

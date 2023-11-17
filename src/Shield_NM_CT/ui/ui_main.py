@@ -76,6 +76,7 @@ class GuiData():
     panel_width = 400
     panel_height = 700
     char_width = 7
+    zoom_active = False
 
 
 class MainWindow(QMainWindow):
@@ -129,7 +130,6 @@ class MainWindow(QMainWindow):
         self.wCalculate = CalculateWidget(self)
 
         self.tabs = QTabWidget()
-        self.tabs.currentChanged.connect(self.new_tab_selection)
         self.scale_tab = ui_main_tabs.ScaleTab(self)
         self.areas_tab = ui_main_tabs.AreasTab(self)
         self.walls_tab = ui_main_tabs.WallsTab(self)
@@ -142,6 +142,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.NMsources_tab, "NM sources")
         self.tabs.addTab(self.CTsources_tab, "CT sources")
         #TODOself.tabs.addTab(self.FLsources_tab, "Fluoro sources")
+        self.tabs.currentChanged.connect(self.new_tab_selection)
 
         bbox = QHBoxLayout()
 
@@ -220,6 +221,7 @@ class MainWindow(QMainWindow):
         if self.user_prefs.dark_mode:
             plt.style.use('dark_background')
         _, _, self.isotopes = cff.load_settings(fname='isotopes')
+        _, _, self.materials = cff.load_settings(fname='materials')
         _, _, self.ct_doserates = cff.load_settings(fname='ct_doserates')
         _, _, self.shield_data = cff.load_settings(fname='shield_data')
         _, _, self.general_values = cff.load_settings(fname='general_values')
@@ -249,13 +251,12 @@ class MainWindow(QMainWindow):
             self.image = mpimg.imread(self.gui.image_path)
 
         # initiate maps
-        if self.occ_map.size < 3:
-            self.occ_map = np.ones(self.image.shape[0:2], dtype=float)
-            try:
-                self.areas_tab.update_occ_map()
-            except AttributeError:
-                pass
-            self.ct_dose_map = np.zeros(self.image.shape[0:2], dtype=float)
+        self.occ_map = np.ones(self.image.shape[0:2], dtype=float)
+        try:
+            self.areas_tab.update_occ_map()
+        except AttributeError:
+            pass
+        self.ct_dose_map = np.zeros(self.image.shape[0:2], dtype=float)
         self.wFloorDisplay.canvas.floor_draw()
 
     def reset_dose(self, floor=None):
@@ -538,6 +539,8 @@ class FloorCanvas(FigureCanvasQTAgg):
 
     def __init__(self, main):
         self.fig = Figure()
+        #self.fig, self.ax = plt.subplots()
+        self.ax = self.fig.add_subplot(111)
         self.fig.subplots_adjust(0., 0., 1., 1.)
         FigureCanvasQTAgg.__init__(self, self.fig)
         self.main = main
@@ -574,11 +577,12 @@ class FloorCanvas(FigureCanvasQTAgg):
         self.mpl_connect("button_release_event", self.on_release)
         self.mpl_connect("motion_notify_event", self.on_motion)
         self.mpl_connect("pick_event", self.on_pick)
+        #self.ax.callbacks.connect("xlim_changed", self.on_zoom_changed_event)
 
     def on_press(self, event):
         """When mouse button pressed."""
-        if hasattr(self, 'ax'):
-            self.mouse_pressed = True
+        self.mouse_pressed = True
+        if self.main.gui.zoom_active is False:
             self.main.gui.x0, self.main.gui.y0 = event.xdata, event.ydata
             self.main.gui.x1, self.main.gui.y1 = event.xdata, event.ydata
 
@@ -614,34 +618,35 @@ class FloorCanvas(FigureCanvasQTAgg):
     def on_motion(self, event):
         """When mouse pressed and moved."""
         if self.mouse_pressed:
-            if self.main.gui.x0 is not None:
-                self.main.gui.x1, self.main.gui.y1 = event.xdata, event.ydata
-                if self.main.gui.current_tab == 'Areas':
-                    self.update_area_on_drag()
-                elif self.main.gui.current_tab in ['Scale', 'Walls']:
-                    if self.drag_handle:
-                        self.update_wall_on_drag()
+            if self.main.gui.zoom_active is False:
+                if self.main.gui.x0 is not None:
+                    self.main.gui.x1, self.main.gui.y1 = event.xdata, event.ydata
+                    if self.main.gui.current_tab == 'Areas':
+                        self.update_area_on_drag()
+                    elif self.main.gui.current_tab in ['Scale', 'Walls']:
+                        if self.drag_handle:
+                            self.update_wall_on_drag()
+                        else:
+                            for p in self.ax.lines:
+                                if p.get_gid() == 'line_temp':
+                                    if self.main.gui.rectify:
+                                        diff_x = abs(self.main.gui.x0 - self.main.gui.x1)
+                                        diff_y = abs(self.main.gui.y0 - self.main.gui.y1)
+                                        if diff_x > diff_y:  # keep y0
+                                            self.main.gui.y1 = self.main.gui.y0
+                                        else:  # keep x0
+                                            self.main.gui.x1 = self.main.gui.x0
+                                    p.set_data(
+                                        [self.main.gui.x0, self.main.gui.x1],
+                                        [self.main.gui.y0, self.main.gui.y1])
+                                    self.draw_idle()
+                                    break
+                            if self.main.gui.current_tab == 'Scale':
+                                self.add_measured_length()
                     else:
-                        for p in self.ax.lines:
-                            if p.get_gid() == 'line_temp':
-                                if self.main.gui.rectify:
-                                    diff_x = abs(self.main.gui.x0 - self.main.gui.x1)
-                                    diff_y = abs(self.main.gui.y0 - self.main.gui.y1)
-                                    if diff_x > diff_y:  # keep y0
-                                        self.main.gui.y1 = self.main.gui.y0
-                                    else:  # keep x0
-                                        self.main.gui.x1 = self.main.gui.x0
-                                p.set_data(
-                                    [self.main.gui.x0, self.main.gui.x1],
-                                    [self.main.gui.y0, self.main.gui.y1])
-                                self.draw_idle()
-                                break
-                        if self.main.gui.current_tab == 'Scale':
-                            self.add_measured_length()
-                else:
-                    self.drag_handle = True
-                    self.update_source_on_drag()
-        else:  # on hover - make thicker + annotate with info_text
+                        self.drag_handle = True
+                        self.update_source_on_drag()
+        else:  # on hover
             if (
                     self.handles_visible is False
                     and event.inaxes == self.ax
@@ -679,11 +684,16 @@ class FloorCanvas(FigureCanvasQTAgg):
                 if prev_hovered_artist != self.hovered_artist:  # redraw
                     if prev_hovered_artist is not None:
                         # reset linethickness or markersize
-                        if self.main.gui.current_tab in ['Areas', 'Walls']:
+                        if self.main.gui.current_tab == 'Areas':
                             prev_hovered_artist.set_linewidth(
                                 self.main.gui.annotations_linethick)
-                            if self.main.gui.current_tab == 'Walls':
+                        elif self.main.gui.current_tab == 'Walls':
+                            try:
+                                curr_lw = plt.getp(prev_hovered_artist, 'linewidth')
+                                prev_hovered_artist.set_linewidth(curr_lw - 2)
                                 prev_hovered_artist.set_markeredgewidth(0)
+                            except:
+                                print('TypeError')
                         else:
                             if 'CT' not in prev_hovered_artist.get_gid():
                                 prev_hovered_artist.set_markersize(
@@ -696,11 +706,16 @@ class FloorCanvas(FigureCanvasQTAgg):
                         self.info_text.set_visible(False)
                         self.draw_idle()
                     else:
-                        if self.main.gui.current_tab in ['Areas', 'Walls']:
+                        if self.main.gui.current_tab == 'Areas':
                             self.hovered_artist.set_linewidth(
                                 self.main.gui.annotations_linethick + 2)
-                            if self.main.gui.current_tab == 'Walls':
+                        elif self.main.gui.current_tab == 'Walls':
+                            try:
+                                curr_lw = plt.getp(self.hovered_artist, 'linewidth')
+                                self.hovered_artist.set_linewidth(curr_lw + 2)
                                 self.hovered_artist.set_markeredgewidth(3)
+                            except:
+                                print('TypeError')
                         else:
                             if 'CT' not in self.hovered_artist.get_gid():
                                 self.hovered_artist.set_markersize(
@@ -713,60 +728,62 @@ class FloorCanvas(FigureCanvasQTAgg):
 
     def on_release(self, event):
         """When mouse button released."""
-        self.mouse_pressed = False
-        self.main.gui.x1, self.main.gui.y1 = event.xdata, event.ydata
+        if self.mouse_pressed:
+            self.mouse_pressed = False
+        if self.main.gui.zoom_active is False:
+            self.main.gui.x1, self.main.gui.y1 = event.xdata, event.ydata
 
-        if self.main.gui.current_tab in ['Areas', 'Scale', 'Walls']:
-            if self.main.gui.x1 is not None:
-                width = np.abs(self.main.gui.x1 - self.main.gui.x0)
-                height = np.abs(self.main.gui.y1 - self.main.gui.y0)
-            else:
-                width = 0
-                height = 0
+            if self.main.gui.current_tab in ['Areas', 'Scale', 'Walls']:
+                if self.main.gui.x1 is not None:
+                    width = np.abs(self.main.gui.x1 - self.main.gui.x0)
+                    height = np.abs(self.main.gui.y1 - self.main.gui.y0)
+                else:
+                    width = 0
+                    height = 0
 
-            if self.drag_handle is False and (width + height) > 20:
-                if self.main.gui.current_tab == 'Areas':
-                    self.area_temp.set_width(width)
-                    self.area_temp.set_height(height)
-                    self.area_temp.set_xy((
-                        min(self.main.gui.x0, self.main.gui.x1),
-                        min(self.main.gui.y0, self.main.gui.y1)))
-                elif self.main.gui.current_tab in ['Scale', 'Walls']:
+                if self.drag_handle is False and (width + height) > 20:
+                    if self.main.gui.current_tab == 'Areas':
+                        self.area_temp.set_width(width)
+                        self.area_temp.set_height(height)
+                        self.area_temp.set_xy((
+                            min(self.main.gui.x0, self.main.gui.x1),
+                            min(self.main.gui.y0, self.main.gui.y1)))
+                    elif self.main.gui.current_tab in ['Scale', 'Walls']:
+                        for p in self.ax.lines:
+                            if p.get_gid() == 'line_temp':
+                                if self.main.gui.rectify:
+                                    diff_x = abs(self.main.gui.x0 - self.main.gui.x1)
+                                    diff_y = abs(self.main.gui.y0 - self.main.gui.y1)
+                                    if diff_x > diff_y:  # keep y0
+                                        self.main.gui.y1 = self.main.gui.y0
+                                    else:  # keep x0
+                                        self.main.gui.x1 = self.main.gui.x0
+                                p.set_data(
+                                    [self.main.gui.x0, self.main.gui.x1],
+                                    [self.main.gui.y0, self.main.gui.y1])
+                                break
+                elif self.drag_handle:
+                    self.finish_drag()
+
+            else:  # mark release position
+                if hasattr(self, 'ax'):
+                    create_new = True
                     for p in self.ax.lines:
-                        if p.get_gid() == 'line_temp':
-                            if self.main.gui.rectify:
-                                diff_x = abs(self.main.gui.x0 - self.main.gui.x1)
-                                diff_y = abs(self.main.gui.y0 - self.main.gui.y1)
-                                if diff_x > diff_y:  # keep y0
-                                    self.main.gui.y1 = self.main.gui.y0
-                                else:  # keep x0
-                                    self.main.gui.x1 = self.main.gui.x0
-                            p.set_data(
-                                [self.main.gui.x0, self.main.gui.x1],
-                                [self.main.gui.y0, self.main.gui.y1])
+                        if p.get_gid() == 'point_release':
+                            create_new = False
+                            p.set_data(event.xdata, event.ydata)
                             break
-            elif self.drag_handle:
-                self.finish_drag()
+                    if create_new:
+                        self.ax.plot(
+                            event.xdata, event.ydata,
+                            'ko', fillstyle='none',
+                            markersize=self.main.gui.annotations_markersize[0],
+                            gid='point_release')
 
-        else:  # mark release position
-            if hasattr(self, 'ax'):
-                create_new = True
-                for p in self.ax.lines:
-                    if p.get_gid() == 'point_release':
-                        create_new = False
-                        p.set_data(event.xdata, event.ydata)
-                        break
-                if create_new:
-                    self.ax.plot(
-                        event.xdata, event.ydata,
-                        'ko', fillstyle='none',
-                        markersize=self.main.gui.annotations_markersize[0],
-                        gid='point_release')
+                if self.drag_handle:
+                    self.finish_drag()
 
-            if self.drag_handle:
-                self.finish_drag()
-
-        self.draw_idle()
+            self.draw_idle()
 
     def on_pick(self, event):
         """When mouse button picking objects."""
@@ -823,6 +840,12 @@ class FloorCanvas(FigureCanvasQTAgg):
                             )
                         self.handles_visible = True
                         self.draw_idle()
+
+    def on_zoom_changed(self):
+        """Redraw walls if real thickness."""
+        if 'Walls' in self.main.wVisual.annotate_texts():
+            if self.main.gui.calibration_factor is not None:
+                self.main.walls_tab.update_wall_annotations()
 
     def reset_hover_pick(self):
         """Reset to neither hovered nor picked artists."""
@@ -910,7 +933,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                     picker=self.main.gui.picker)
             if hasattr(self, 'measured_text'):
                 self.measured_text.set_text('')
-        self.draw()
+        self.draw_idle()
 
     def remove_scale(self):
         """Remove scale from display."""
@@ -975,6 +998,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                     p.set_markeredgewidth(0)
             except ValueError:
                 pass
+        print('wall hightlight')
         self.draw_idle()
 
     def sourcepos_highlight(self):
@@ -1194,10 +1218,10 @@ class FloorCanvas(FigureCanvasQTAgg):
     def floor_draw(self):
         """Draw or redraw all elements."""
         # reset
-        self.fig.clear()
-        if hasattr(self, 'ax'):
-            self.ax.cla()
-        self.ax = self.fig.add_subplot(111)
+        #self.fig.clear()
+        #if hasattr(self, 'ax'):
+        self.ax.cla()
+        #self.ax = self.fig.add_subplot(111)
 
         props = dict(boxstyle='round', facecolor='wheat', alpha=0.6, pad=1)
         self.info_text = self.ax.text(
@@ -1209,13 +1233,7 @@ class FloorCanvas(FigureCanvasQTAgg):
         self.image_overlay = self.ax.imshow(
             np.zeros(self.main.image.shape[0:2]), alpha=0)
         self.main.wVisual.overlay_selections_changed()
-
         self.draw_idle()
-        '''
-        print(f'main image shape {self.main.image.shape}')
-        print(f'main occ map shape {self.main.occ_map.shape}')
-        breakpoint()
-        '''
 
 
 class FloorWidget(QWidget):
@@ -1284,6 +1302,7 @@ class NavToolBar(NavigationToolbar2QT):
 
     def __init__(self, canvas, parent):
         super().__init__(canvas, parent)
+        self.main = parent.main
         for x in self.actions():
             if x.text() in ['Back', 'Forward', 'Subplots']:#, 'Customize']:
                 self.removeAction(x)
@@ -1291,6 +1310,55 @@ class NavToolBar(NavigationToolbar2QT):
     def set_message(self, event):
         """Hide cursor position and value text."""
         pass
+
+    def zoom(self, *args):
+        """Override super zoom to set zoom flag."""
+        if self.main.gui.zoom_active:
+            self.main.gui.zoom_active = False
+        else:
+            self.main.gui.zoom_active = True
+        super().zoom(*args)
+
+    def release_zoom(self, event):
+        """Override super().release_zoom to update wall-thickness."""
+        super().release_zoom(event)
+        self.canvas.on_zoom_changed()
+
+    def home(self, *args):
+        """Override super().home to update wall thickness."""
+        super().home(*args)
+        self.canvas.on_zoom_changed()
+
+    def save_figure(self, *args):
+        """Fix to avoid crash on self.canvas.parent() TypeError.
+
+        from https://github.com/matplotlib/matplotlib/blob/main/lib/matplotlib/backends/backend_qt.py
+        """
+        filetypes = self.canvas.get_supported_filetypes_grouped()
+        sorted_filetypes = sorted(filetypes.items())
+        default_filetype = self.canvas.get_default_filetype()
+
+        # startpath = os.path.expanduser(mpl.rcParams['savefig.directory'])
+        # start = os.path.join(startpath, self.canvas.get_default_filename())
+        filters = []
+        selectedFilter = None
+        for name, exts in sorted_filetypes:
+            exts_list = " ".join(['*.%s' % ext for ext in exts])
+            filter = f'{name} ({exts_list})'
+            if default_filetype in exts:
+                selectedFilter = filter
+            filters.append(filter)
+        filters = ';;'.join(filters)
+
+        fname, filter = QFileDialog.getSaveFileName(
+            self, 'Choose a filename to save to', '',
+            filters, selectedFilter)
+        if fname:
+            try:
+                self.canvas.figure.savefig(fname)
+            except Exception as e:
+                QMessageBox.critical(
+                    self, "Error saving file", str(e))
 
 
 class PositionToolBar(QWidget):
@@ -1469,6 +1537,18 @@ class VisualizationWidget(QWidget):
                     patch.remove()
             self.main.wFloorDisplay.canvas.draw_idle()
 
+        if 'Walls' in txts:
+            self.main.walls_tab.update_wall_annotations()
+        else:
+            for line in self.main.wFloorDisplay.canvas.ax.lines:
+                try:
+                    int_id = int(line.get_gid())
+                except ValueError:
+                    int_id = None
+                if int_id is not None:
+                    line.remove()
+            self.main.wFloorDisplay.canvas.draw_idle()
+
         remove_modalities = []
         if 'NM sources' in txts:
             self.main.NMsources_tab.update_source_annotations()
@@ -1481,7 +1561,6 @@ class VisualizationWidget(QWidget):
                 for mod in remove_modalities:
                     if mod in line.get_gid():
                         line.remove()
-                        break
             self.main.wFloorDisplay.canvas.draw_idle()
 
     def overlay_selections_changed(self):

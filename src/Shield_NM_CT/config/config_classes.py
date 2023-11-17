@@ -78,10 +78,12 @@ class CT_doserates:
 
 @dataclass
 class Material:
-    """Material name and ID to save and read as yaml."""
+    """Material name and display settings."""
 
     label: str = ''
-    description: str = ''
+    default_thickness: float = 0.0  # mm
+    real_thickness: bool = False
+    color: str = '#000000'
 
 
 @dataclass

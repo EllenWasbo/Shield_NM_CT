@@ -93,6 +93,9 @@ class SettingsDialog(ShieldDialog):
         add_widget(parent=self.item_shared_settings, snake='isotopes',
                    title='Isotopes',
                    widget=settings_stacks.IsotopeWidget(self.main))
+        add_widget(parent=self.item_shared_settings, snake='materials',
+                   title='Materials',
+                   widget=settings_stacks.MaterialWidget(self.main))
         add_widget(parent=self.item_shared_settings, snake='shield_data',
                    title='Shield data',
                    widget=settings_stacks.ShieldDataWidget(self.main))
