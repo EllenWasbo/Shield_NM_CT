@@ -8,12 +8,12 @@ import os
 import copy
 from time import time
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QItemSelectionModel
 from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QToolBar,
     QLabel, QPushButton, QButtonGroup, QRadioButton, QAction, QCheckBox,
-    QComboBox, QDoubleSpinBox, QInputDialog, QColorDialog,
+    QComboBox, QDoubleSpinBox, QInputDialog, QColorDialog, QTableWidget,
     QMessageBox
     )
 
@@ -45,9 +45,10 @@ class IsotopeWidget(StackWidget):
         self.half_life_unit.addItems(['minutes', 'hours', 'days'])
         self.half_life_unit.currentIndexChanged.connect(lambda: self.flag_edit(True))
         self.gamma_ray_constant = QDoubleSpinBox(decimals=5)
-        self.gamma_ray_constant.valueChanged.connect(lambda: self.flag_edit(True))
+        self.gamma_ray_constant.valueChanged.connect(self.constants_changed)
         self.patient_constant = QDoubleSpinBox(decimals=5)
-        self.patient_constant.valueChanged.connect(lambda: self.flag_edit(True))
+        self.patient_constant.valueChanged.connect(self.constants_changed)
+        self.patient_percent = QLabel()
 
         self.wid_temp = QWidget(self)
 
@@ -76,6 +77,13 @@ class IsotopeWidget(StackWidget):
         hlo_constant2.addWidget(self.patient_constant)
         hlo_constant2.addStretch()
 
+        hlo_percent = QHBoxLayout()
+        self.vlo_temp.addLayout(hlo_percent)
+        hlo_percent.addWidget(QLabel(
+            'Patient constant relative to point source constant:'))
+        hlo_percent.addWidget(self.patient_percent)
+        hlo_percent.addStretch()
+
         self.vlo_temp.addStretch()
 
         self.vlo.addWidget(uir.HLine())
@@ -87,6 +95,7 @@ class IsotopeWidget(StackWidget):
         self.half_life_unit.setCurrentText(self.current_template.half_life_unit)
         self.gamma_ray_constant.setValue(self.current_template.gamma_ray_constant)
         self.patient_constant.setValue(self.current_template.patient_constant)
+        self.constants_changed()
         self.flag_edit(False)
 
     def get_current_template(self):
@@ -95,6 +104,15 @@ class IsotopeWidget(StackWidget):
         self.current_template.half_life_unit = self.half_life_unit.currentText()
         self.current_template.gamma_ray_constant = self.gamma_ray_constant.value()
         self.current_template.patient_constant = self.patient_constant.value()
+
+    def constants_changed(self):
+        """Edited constants."""
+        self.flag_edit(True)
+        txt = '-'
+        if self.patient_constant.value() > 0:
+            ratio = self.patient_constant.value() / self.gamma_ray_constant.value()
+            txt = f'{100*ratio:.1f} %'
+        self.patient_percent.setText(txt)
 
     def delete(self):
         """After verifying at will."""
@@ -182,8 +200,10 @@ class ShieldDataWidget(StackWidget):
             'Combining isotope or kVp with materials to set shield properties.<br>'
             'The Archer equations for broad beam transmission is used if \u03b1, '
             '\u03b2, \u03b3 for this equation are defined.<br>'
-            'Else tenth value layer (TVL) is used to calculate the transmission. '
-            'The method of TVL1 and TVL2 is described in [XXXX the candian ref XXXX].'
+            'Else half and tenth value layer is used to calculate the transmission '
+            'according to the method described in '
+            '<a href="https://nuclearsafety.gc.ca/pubs_catalogue/uploads/radionuclide-information-booklet-2022-eng.pdf">'
+            'Radionuclide Information Booklet (2023)</a>.'
             )
         super().__init__(main, header, subtxt, temp_list=True, temp_alias='material')
         self.fname = 'shield_data'
@@ -195,12 +215,14 @@ class ShieldDataWidget(StackWidget):
         self.beta.valueChanged.connect(lambda: self.flag_edit(True))
         self.gamma = QDoubleSpinBox(minimum=-100, maximum=100., decimals=4)
         self.gamma.valueChanged.connect(lambda: self.flag_edit(True))
-        self.tvl1 = QDoubleSpinBox(minimum=-100, maximum=100., decimals=4)
+        self.hvl1 = QDoubleSpinBox(maximum=1000., decimals=3)
+        self.hvl1.valueChanged.connect(lambda: self.flag_edit(True))
+        self.hvl2 = QDoubleSpinBox(maximum=1000., decimals=3)
+        self.hvl2.valueChanged.connect(lambda: self.flag_edit(True))
+        self.tvl1 = QDoubleSpinBox(maximum=1000., decimals=3)
         self.tvl1.valueChanged.connect(lambda: self.flag_edit(True))
-        self.tvl2 = QDoubleSpinBox(minimum=-100, maximum=100., decimals=4)
+        self.tvl2 = QDoubleSpinBox(maximum=1000., decimals=3)
         self.tvl2.valueChanged.connect(lambda: self.flag_edit(True))
-        self.tvle = QDoubleSpinBox(minimum=-100, maximum=100., decimals=4)
-        self.tvle.valueChanged.connect(lambda: self.flag_edit(True))
 
         self.cbox_sources = QComboBox(self)
         self.cbox_sources.currentIndexChanged.connect(self.source_changed)
@@ -276,9 +298,10 @@ class ShieldDataWidget(StackWidget):
         flo1.addRow(QLabel('\u03b3:'), self.gamma)
         flo2 = QFormLayout()
         hlo.addLayout(flo2)
-        flo2.addRow(QLabel('TVL1: '), self.tvl1)
-        flo2.addRow(QLabel('TVL2: '), self.tvl2)
-        flo2.addRow(QLabel('TVLe: '), self.tvle)
+        flo2.addRow(QLabel('HVL1 (mm): '), self.hvl1)
+        flo2.addRow(QLabel('HVL2 (mm): '), self.hvl2)
+        flo2.addRow(QLabel('TVL1 (mm): '), self.tvl1)
+        flo2.addRow(QLabel('TVL2 (mm): '), self.tvl2)
 
         self.vlo_temp.addStretch()
         hlo_btns = QHBoxLayout()
@@ -361,9 +384,10 @@ class ShieldDataWidget(StackWidget):
         self.alpha.setValue(self.current_template.alpha)
         self.beta.setValue(self.current_template.beta)
         self.gamma.setValue(self.current_template.gamma)
+        self.hvl1.setValue(self.current_template.hvl1)
+        self.hvl2.setValue(self.current_template.hvl2)
         self.tvl1.setValue(self.current_template.tvl1)
         self.tvl2.setValue(self.current_template.tvl2)
-        self.tvle.setValue(self.current_template.tvle)
         self.flag_edit(False)
 
     def source_type_changed(self):
@@ -394,15 +418,6 @@ class ShieldDataWidget(StackWidget):
             self.refresh_templist(selected_label=self.current_template.material)
         else:
             self.refresh_templist()
-
-    def verify_save(self, fname, lastload):
-        """Verify that save is possible and not in conflict with other users."""
-        proceed = cff.verify_config_folder(self)
-        if proceed:
-            proceed, errmsg = cff.check_save_conflict(fname, lastload)
-            if errmsg != '':
-                proceed = messageboxes.proceed_question(self, errmsg)
-        return proceed
 
     def save_general_and_shield_data(self):
         """Save general_values and shield_data. Assume verify_save already."""
@@ -577,6 +592,195 @@ class ShieldDataWidget(StackWidget):
             self.current_template.alpha = self.alpha.value()
             self.current_template.beta = self.beta.value()
             self.current_template.gamma = self.gamma.value()
+            self.current_template.hvl1 = self.hvl1.value()
+            self.current_template.hvl2 = self.hvl2.value()
             self.current_template.tvl1 = self.tvl1.value()
             self.current_template.tvl2 = self.tvl2.value()
-            self.current_template.tvle = self.tvle.value()
+
+
+class ColormapSettingsWidget(StackWidget):
+    """Widget for setting colormaps."""
+
+    def __init__(self, main):
+        header = 'Colormaps'
+        subtxt = 'Configre colors for dose and doserate limits.'
+        super().__init__(main, header, subtxt, temp_list=True, temp_alias='colormap')
+        self.fname = 'colormaps'
+        self.empty_template = cfc.ColorMap()
+        self.active_row = 0
+        self.empty_row = [0.0, '#000000']
+        self.table_list = []
+        self.wid_temp_list.toolbar.setVisible(False)
+
+        self.table = QTableWidget(1, 2)
+        self.table.setMinimumHeight(250)
+        self.table.setSelectionMode(QTableWidget.SingleSelection)
+        self.table.setHorizontalHeaderLabels(
+            ['For dose(rate) higher than', 'Color'])
+        self.table.verticalHeader().setVisible(False)
+        self.table.setColumnWidth(0, 40*self.main.gui.char_width)
+        self.table.setColumnWidth(1, 25*self.main.gui.char_width)
+        self.add_cell_widgets(0)
+
+        table_toolbar = QToolBar()
+        table_toolbar.setOrientation(Qt.Vertical)
+
+        act_delete = QAction('Delete', self)
+        act_delete.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}delete.png'))
+        act_delete.setToolTip('Delete selected row')
+        act_delete.triggered.connect(self.delete_row)
+
+        act_add = QAction('Add', self)
+        act_add.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}add.png'))
+        act_add.setToolTip('Add new row after selected row')
+        act_add.triggered.connect(self.add_row)
+
+        act_edit = QAction('Edit', self)
+        act_edit.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}edit.png'))
+        act_edit.setToolTip('Edit color of selected row')
+        act_edit.triggered.connect(self.edit_color_row)
+
+        table_toolbar.addActions([act_delete, act_add, act_edit])
+
+        btn_save = QPushButton('Save')
+        btn_save.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}save.png'))
+        btn_save.clicked.connect(self.save_colormap)
+        if self.main.save_blocked:
+            btn_save.setEnabled(False)
+
+        self.wid_temp = QWidget(self)
+        self.hlo.addWidget(self.wid_temp)
+        self.vlo_temp = QVBoxLayout()
+        self.wid_temp.setLayout(self.vlo_temp)
+
+        hlo = QHBoxLayout()
+        self.vlo_temp.addLayout(hlo)
+        hlo.addWidget(table_toolbar)
+        hlo.addWidget(self.table)
+
+        self.vlo_temp.addStretch()
+        self.vlo_temp.addWidget(btn_save)
+
+        self.vlo.addWidget(uir.HLine())
+        self.vlo.addWidget(self.status_label)
+
+    def add_cell_widgets(self, row, initial_value=0.0, initial_color='#000000'):
+        """Add cell widgets to the selected row (new row, default values)."""
+        self.table.setCellWidget(row, 0, uir.CellSpinBox(
+            self, initial_value=initial_value, min_val=0., max_val=200,
+            row=row, col=0, step=0.25, decimals=3))
+        self.table.setCellWidget(row, 1, uir.ColorCell(
+            self, initial_color=initial_color, row=row, col=1))
+
+    def delete_row(self):
+        """Delete selected row.
+
+        Returns
+        -------
+        row : int
+            index of the deleted row
+        """
+        row = self.active_row
+        if row > -1:
+            proceed = messageboxes.proceed_question(self, 'Delete active row?')
+            if proceed:
+                if len(self.table_list) == 1:
+                    self.add_cell_widgets(0)
+                    self.table.removeRow(1)
+                    self.table_list = [copy.deepcopy(self.empty_row)]
+                    self.active_row = 0
+                else:
+                    self.table.removeRow(row)
+                    self.table_list.pop(row)
+                    self.update_row_number(row, -1)
+                self.select_row_col(row, 0)
+            else:
+                row = -1
+        return row
+
+    def add_row(self):
+        """Add row after selected row (or as last row if none selected).
+
+        Returns
+        -------
+        newrow : int
+            index of the new row
+        """
+        newrow = -1
+        if self.active_row == -1:
+            newrow = self.table.rowCount()
+        else:
+            newrow = self.active_row + 1
+            self.update_row_number(newrow, 1)
+        self.table.insertRow(newrow)
+        self.table_list.insert(newrow, copy.deepcopy(self.empty_row))
+        self.select_row_col(newrow, 1)
+        return newrow
+
+    def edit_color_row(self):
+        """Edit color for active row."""
+        color = QColorDialog.getColor()
+        if color.isValid():
+            self.table_list[self.active_row][1] = color.name()
+            w = self.table.cellWidget(self.active_row, 1)
+            w.setStyleSheet(
+                f'QLabel{{background-color: {color.name()};}}')
+            self.flag_edit(True)
+
+    def cell_changed(self, row, col, decimals=None):
+        """Value changed by user input."""
+        value = self.get_cell_value(row, col)
+        if decimals:
+            value = round(value, decimals)
+        self.table_list[row][col] = value
+        self.flag_edit(True)
+
+    def select_row_col(self, row, col):
+        """Set focus on selected row and col."""
+        index = self.table.model().index(row, col)
+        self.table.selectionModel().select(
+            index, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
+        self.active_row = row
+
+    def cell_selection_changed(self, row, col):
+        """Cell widget got focus. Change active row and highlight."""
+        self.select_row_col(row, col)
+
+    def update_row_number(self, first_row_to_adjust, row_adjust):
+        """Adjust row number of cell widgets after inserting/deleting rows.
+
+        Parameters
+        ----------
+        first_row_to_adjust : int
+            first row number to adjust by row_adjust
+        row_adjust : int
+            number to adjust row numbers by
+        """
+        for i in range(first_row_to_adjust, self.table.rowCount()):
+            for j in range(self.table.columnCount()):
+                w = self.table.cellWidget(i, j)
+                w.row = w.row + row_adjust
+
+    def update_data(self):
+        """Refresh GUI after selecting template."""
+        tempno = self.current_labels.index(self.current_template.label)
+        self.table_list = self.templates[tempno].table
+        self.table.setRowCount(0)
+
+        for i, row in enumerate(self.table_list):
+            self.table.insertRow(i)
+            self.add_cell_widgets(i, initial_value=row[0], initial_color=row[1])
+
+        self.flag_edit(False)
+
+    def save_colormap(self):
+        """Save current colormap."""
+        tempno = self.current_labels.index(self.current_template.label)
+        self.templates[tempno].table = copy.deepcopy(self.table_list)
+        ok_save = self.verify_save(self.fname, self.lastload)
+        if ok_save:
+            ok_save, path = cff.save_settings(
+                self.templates, fname=self.fname)
+            self.status_label.setText(f'Changes saved to {path}')
+            self.flag_edit(False)
+            self.lastload = time()

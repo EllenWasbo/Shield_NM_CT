@@ -7,10 +7,7 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from time import ctime
-from dataclasses import dataclass, field
-import numpy as np
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
@@ -18,7 +15,7 @@ from PyQt5.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QStackedWidget,
     QVBoxLayout, QHBoxLayout, QGroupBox,
     QLabel, QLineEdit, QPushButton, QSpinBox, QCheckBox,
-    QListWidget, QMessageBox, QDialogButtonBox, QFileDialog
+    QListWidget, QMessageBox, QFileDialog
     )
 
 # Shield_NM_CT block start
@@ -99,6 +96,9 @@ class SettingsDialog(ShieldDialog):
         add_widget(parent=self.item_shared_settings, snake='shield_data',
                    title='Shield data',
                    widget=settings_stacks.ShieldDataWidget(self.main))
+        add_widget(parent=self.item_shared_settings, snake='colormaps',
+                   title='Color settings',
+                   widget=settings_stacks.ColormapSettingsWidget(self.main))
 
         item, widget = self.get_item_widget_from_txt(initial_view)
         self.tree_settings.setCurrentItem(item)
@@ -109,7 +109,6 @@ class SettingsDialog(ShieldDialog):
         self.current_selected_txt = initial_view
 
         widget.update_from_yaml(initial_template_label=initial_template_label)
-
 
     def get_item_widget_from_txt(self, txt):
         """Find tree item and stack widget based on item txt."""

@@ -39,5 +39,7 @@ def read_yaml(fname=''):
                     settings.append(cfc.CT_doserates(**doc))
                 elif fname == 'shield_data':
                     settings.append(cfc.ShieldData(**doc))
+                elif fname == 'colormaps':
+                    settings.append(cfc.ColorMap(**doc))
 
     return settings

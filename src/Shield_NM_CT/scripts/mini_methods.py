@@ -15,6 +15,93 @@ from Shield_NM_CT.ui import messageboxes
 # Shield_NM_CT block end
 
 
+def get_pos_from_text(text):
+    """Get coordinate string as coordinates.
+
+    Parameters
+    ----------
+    text : str
+        "x, y"
+
+    Returns
+    -------
+    x : int
+    y : int
+        as for coords for Rectangle
+    """
+    coords = text.split(', ')
+    if len(coords) == 2:
+        x = int(coords[0])
+        y = int(coords[1])
+    else:
+        x = None
+        y = None
+
+    return (x, y)
+
+
+def get_wall_from_text(text):
+    """Get coordinate string for wall.
+
+    Parameters
+    ----------
+    text : str
+        "x0, y0, x1, y1"
+
+    Returns
+    -------
+    x0 : int
+    y0 : int
+    x1 : int
+    y1 : int
+        as for coords for wall
+    """
+    coords = text.split(', ')
+    if len(coords) == 4:
+        x0 = int(coords[0])
+        y0 = int(coords[1])
+        x1 = int(coords[2])
+        y1 = int(coords[3])
+    else:
+        x0 = 0
+        y0 = 0
+        x1 = 0
+        y1 = 0
+
+    return (x0, y0, x1, y1)
+
+
+def get_area_from_text(text):
+    """Get coordinate string for area as area.
+
+    Parameters
+    ----------
+    text : str
+        "x0, y0, x1, y1"
+
+    Returns
+    -------
+    x0 : int
+    y0 : int
+    width : int
+    height : int
+        as for coords for Rectangle
+    """
+    coords = text.split(', ')
+    if len(coords) == 4:
+        x0 = int(coords[0])
+        y0 = int(coords[1])
+        width = int(coords[2]) - x0
+        height = int(coords[3]) - y0
+    else:
+        x0 = 0
+        y0 = 0
+        width = 1
+        height = 1
+
+    return (x0, y0, width, height)
+
+
 def string_to_float(string_value):
     """Convert string to float, accept comma as decimal-separator.
 

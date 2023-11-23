@@ -55,6 +55,10 @@ CONFIG_FNAMES = {
         'saved_as': 'object_list',
         'default': shield_constants_functions.read_yaml(fname='shield_data')
         },
+    'colormaps': {
+        'saved_as': 'object_list',
+        'default': shield_constants_functions.read_yaml(fname='colormaps')
+        },
     'active_users': {
         'saved_as': 'dict',
         'default': {},

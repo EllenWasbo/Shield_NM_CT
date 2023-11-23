@@ -21,6 +21,7 @@ from matplotlib.patches import Rectangle
 from Shield_NM_CT.config.Shield_NM_CT_constants import ENV_ICON_PATH
 from Shield_NM_CT.ui import messageboxes
 import Shield_NM_CT.ui.reusable_widgets as uir
+from Shield_NM_CT.scripts import mini_methods
 import Shield_NM_CT.resources
 # Shield_NM_CT block end
 
@@ -43,10 +44,10 @@ class TableToolBar(QToolBar):
         act_add.setToolTip('Add new row after selected row (+)')
         act_add.triggered.connect(table.add_row)
 
-        act_duplicate = QAction('Duplicate', self)
-        act_duplicate.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}duplicate.png'))
-        act_duplicate.setToolTip('Duplicate')
-        act_duplicate.triggered.connect(table.duplicate_row)
+        self.act_duplicate = QAction('Duplicate', self)
+        self.act_duplicate.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}duplicate.png'))
+        self.act_duplicate.setToolTip('Duplicate')
+        self.act_duplicate.triggered.connect(table.duplicate_row)
 
         act_export = QAction('Export CSV', self)
         act_export.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}fileCSV.png'))
@@ -58,7 +59,8 @@ class TableToolBar(QToolBar):
         act_import.setToolTip('Import table from CSV')
         act_import.triggered.connect(lambda: table.import_csv())
 
-        self.addActions([act_delete, act_add, act_duplicate, act_export, act_import])
+        self.addActions([
+            act_delete, act_add, self.act_duplicate, act_export, act_import])
 
 
 class InputTab(QWidget):
@@ -143,7 +145,7 @@ class InputTab(QWidget):
     def update_current_source_annotation(self):
         """Update annotations for active source."""
         tabitem = self.table.cellWidget(self.active_row, 2)
-        x, y = self.get_pos_from_text(tabitem.text())
+        x, y = mini_methods.get_pos_from_text(tabitem.text())
 
         canvas = self.main.wFloorDisplay.canvas
         line_index = None
@@ -231,7 +233,7 @@ class InputTab(QWidget):
                 for i in range(w.table.rowCount()):
                     if w.table_list[i][0]:  # if active
                         tabitem = w.table.cellWidget(i, 2)
-                        x, y = w.get_pos_from_text(tabitem.text())
+                        x, y = mini_methods.get_pos_from_text(tabitem.text())
                         if x is not None:
                             canvas.ax.plot(
                                 x, y, 'bo',
@@ -250,7 +252,7 @@ class InputTab(QWidget):
         """Highlight source position in image if positions given."""
         if self.active_row > -1:
             tabitem = self.table.cellWidget(self.active_row, 2)
-            x, y = self.get_pos_from_text(tabitem.text())
+            x, y = mini_methods.get_pos_from_text(tabitem.text())
             self.main.wFloorDisplay.canvas.sourcepos_highlight()
         else:
             self.main.wFloorDisplay.canvas.draw_idle()  # in case of previous changes
@@ -353,30 +355,6 @@ class InputTab(QWidget):
 
         return content
 
-    def get_pos_from_text(self, text):
-        """Get coordinate string as coordinates.
-
-        Parameters
-        ----------
-        text : str
-            "x, y"
-
-        Returns
-        -------
-        x : int
-        y : int
-            as for coords for Rectangle
-        """
-        coords = text.split(', ')
-        if len(coords) == 2:
-            x = int(coords[0])
-            y = int(coords[1])
-        else:
-            x = None
-            y = None
-
-        return (x, y)
-
     def get_table_as_list(self):
         """Get table as list."""
         datalist = []
@@ -394,6 +372,8 @@ class InputTab(QWidget):
                         datarow.append(w.isChecked())
                     elif hasattr(w, 'setText'):
                         datarow.append(w.text())
+                    elif hasattr(w, 'setCurrentText'):
+                        datarow.append(w.currentText())
                     elif hasattr(w, 'setValue'):
                         val = round(w.value(), w.decimals())
                         datarow.append(val)
@@ -729,45 +709,15 @@ class AreasTab(InputTab):
         self.highlight_selected_in_image()
         self.update_occ_map()
 
-    def get_area_from_text(self, text):
-        """Get coordinate string for area as area.
-
-        Parameters
-        ----------
-        text : str
-            "x0, y0, x1, y1"
-
-        Returns
-        -------
-        x0 : int
-        y0 : int
-        width : int
-        height : int
-            as for coords for Rectangle
-        """
-        coords = text.split(', ')
-        if len(coords) == 4:
-            x0 = int(coords[0])
-            y0 = int(coords[1])
-            width = int(coords[2]) - x0
-            height = int(coords[3]) - y0
-        else:
-            x0 = 0
-            y0 = 0
-            width = 1
-            height = 1
-
-        return (x0, y0, width, height)
-
     def highlight_selected_in_image(self):
         """Highlight area in image if area positions given."""
         if self.active_row > -1:
             tabitem = self.table.cellWidget(self.active_row, 2)
-            x0, y0, width, height = self.get_area_from_text(tabitem.text())
+            x0, y0, width, height = mini_methods.get_area_from_text(tabitem.text())
             self.main.wFloorDisplay.canvas.add_area_highlight(
                 x0, y0, width, height)
 
-    def update_occ_map(self):
+    def update_occ_map(self, update_overlay=True):
         """Update array containing occupation factors and redraw."""
         # reset occ_map, rectangle annotations and related parameters
         self.main.occ_map = np.ones(self.main.image.shape[0:2])
@@ -785,7 +735,7 @@ class AreasTab(InputTab):
         for i in range(self.table.rowCount()):
             if self.table_list[i][0]:  # if active
                 tabitem = self.table.cellWidget(i, 2)
-                x0, y0, width, height = self.get_area_from_text(tabitem.text())
+                x0, y0, width, height = mini_methods.get_area_from_text(tabitem.text())
                 self.main.occ_map[y0:y0+height, x0:x0+width] = self.table_list[i][3]
                 areas_this.append(Rectangle(
                     (x0, y0), width, height, edgecolor='blue',
@@ -793,8 +743,9 @@ class AreasTab(InputTab):
                     picker=True, gid=f'{i}'))
                 self.main.wFloorDisplay.canvas.ax.add_patch(areas_this[-1])
         self.main.wFloorDisplay.canvas.image_overlay.set_data(self.main.occ_map)
-        self.main.wFloorDisplay.canvas.image_overlay.set(
-            cmap='rainbow', alpha=self.main.gui.alpha_overlay, clim=(0., 1.))
+        if update_overlay:
+            self.main.wFloorDisplay.canvas.image_overlay.set(
+                cmap='rainbow', alpha=self.main.gui.alpha_overlay, clim=(0., 1.))
         self.main.wFloorDisplay.canvas.draw_idle()
 
     def delete_row(self):
@@ -856,6 +807,7 @@ class WallsTab(InputTab):
             btn_get_pos_text='Get wall coordinates as marked in image')
         self.rectify = QCheckBox("Rectify")
         self.rectify.setChecked(True)
+        self.rectify.clicked.connect(self.rectify_changed)
         self.hlo_extra.addWidget(self.rectify)
 
         self.label = 'Walls'
@@ -901,7 +853,7 @@ class WallsTab(InputTab):
                 self, self.material_strings, row=row, col=3))
             w = self.table.cellWidget(row, 3)
             if prev_val in self.material_strings:
-                w.setText(prev_val)
+                w.setCurrentText(prev_val)
             else:
                 if prev_val is not None:
                     warnings.append(
@@ -916,6 +868,10 @@ class WallsTab(InputTab):
                 icon=QMessageBox.Warning,
                 details=warnings)
             dlg.exec()
+
+    def rectify_changed(self):
+        """Update main.gui.rectify when settings manually changed."""
+        self.main.gui.rectify = self.rectify.isChecked()
 
     def get_pos(self):
         """Get positions for element as defined in figure."""
@@ -934,36 +890,6 @@ class WallsTab(InputTab):
                 self.main.reset_dose()
             except:
                 self.select_row_col(0, 0)
-
-    def get_wall_from_text(self, text):
-        """Get coordinate string for wall.
-
-        Parameters
-        ----------
-        text : str
-            "x0, y0, x1, y1"
-
-        Returns
-        -------
-        x0 : int
-        y0 : int
-        x1 : int
-        y1 : int
-            as for coords for wall
-        """
-        coords = text.split(', ')
-        if len(coords) == 4:
-            x0 = int(coords[0])
-            y0 = int(coords[1])
-            x1 = int(coords[2])
-            y1 = int(coords[3])
-        else:
-            x0 = 0
-            y0 = 0
-            x1 = 0
-            y1 = 0
-
-        return (x0, y0, x1, y1)
 
     def get_color_from_material(self, material):
         """Return color for given material label.
@@ -1044,15 +970,14 @@ class WallsTab(InputTab):
     def update_current_wall_annotation(self):
         """Update annotations for active wall."""
         tabitem = self.table.cellWidget(self.active_row, 2)
-        x0, y0, x1, y1 = self.get_wall_from_text(tabitem.text())
+        x0, y0, x1, y1 = mini_methods.get_wall_from_text(tabitem.text())
 
         canvas = self.main.wFloorDisplay.canvas
-        line_index = None
-        for i, line in enumerate(canvas.ax.lines):
+        for line in canvas.ax.lines:
             try:
                 row = int(line.get_gid())
                 if row == self.active_row:
-                    line_index = i
+                    line.remove()
                     break
             except ValueError:
                 pass
@@ -1064,25 +989,17 @@ class WallsTab(InputTab):
             color = self.get_color_from_material(material)
             linewidth = self.get_linewidth(
                 material, self.table.cellWidget(self.active_row, 4).value())
-            if line_index is None:  # add
-                canvas.ax.plot(
-                    [x0, x1], [y0, y1],
-                    linestyle='-', marker='o', fillstyle='none', solid_capstyle='butt',
-                    linewidth=linewidth, color=color,
-                    markersize=self.main.gui.annotations_markersize[0],
-                    markeredgecolor='blue', markeredgewidth=0,
-                    picker=self.main.gui.picker,
-                    gid=f'{i}')
-                self.highlight_selected_in_image()
-            else:  # update
-                canvas.ax.lines[line_index].set_data([x0, x1], [y0, y1])
-                canvas.ax.lines[line_index].set_linewidth = linewidth
-                canvas.ax.lines[line_index].set_color = color
-                canvas.draw()
+            canvas.ax.plot(
+                [x0, x1], [y0, y1],
+                linestyle='-', marker='o', fillstyle='none', solid_capstyle='butt',
+                linewidth=linewidth, color=color,
+                markersize=self.main.gui.annotations_markersize[0],
+                markeredgecolor='blue', markeredgewidth=0,
+                picker=self.main.gui.picker,
+                gid=f'{self.active_row}')
+            self.highlight_selected_in_image()
         else:
-            if line_index is not None:
-                canvas.ax.lines[line_index].remove()
-                canvas.draw_idle()
+            canvas.draw_idle()
 
     def update_wall_annotations(self):
         """Update annotations for walls."""
@@ -1108,7 +1025,7 @@ class WallsTab(InputTab):
         for i in range(self.table.rowCount()):
             if self.table_list[i][0]:  # if active
                 tabitem = self.table.cellWidget(i, 2)
-                x0, y0, x1, y1 = self.get_wall_from_text(tabitem.text())
+                x0, y0, x1, y1 = mini_methods.get_wall_from_text(tabitem.text())
                 material = self.table.cellWidget(i, 3).currentText()
                 color = self.get_color_from_material(material)
                 linewidth = self.get_linewidth(
@@ -1128,7 +1045,7 @@ class WallsTab(InputTab):
         """Highlight area in image if area positions given."""
         if self.active_row > -1:
             tabitem = self.table.cellWidget(self.active_row, 2)
-            x0, y0, x1, y1 = self.get_wall_from_text(tabitem.text())
+            x0, y0, x1, y1 = mini_methods.get_wall_from_text(tabitem.text())
             self.main.wFloorDisplay.canvas.wall_highlight()
 
     def delete_row(self):
@@ -1256,7 +1173,7 @@ class NMsourcesTab(InputTab):
         for i in range(self.table.rowCount()):
             if self.table_list[i][0]:  # if active
                 tabitem = self.table.cellWidget(i, 2)
-                x, y = self.get_pos_from_text(tabitem.text())
+                x, y = mini_methods.get_pos_from_text(tabitem.text())
                 # TODO ....
         self.main.wFloorDisplay.canvas.floor_draw()
 
@@ -1310,14 +1227,14 @@ class NMsourcesTab(InputTab):
 
 
 class CTsourcesTab(InputTab):
-    """GUI for adding/editing NM sources."""
+    """GUI for adding/editing CT sources."""
 
     def __init__(self, main):
         super().__init__(
             header='CT sources',
             info=(
                 'For stray radiation using coronal and sagittal doserate map.<br>'
-                '(Use "kV sources" if isotropic stray radiation.)<br>'
+                '(Use "Other sources" if isotropic stray radiation.)<br>'
                 '<br>'
                 'Select position of source in floor plan (mouse click).<br>'
                 'Select the row for which you want to set this source position.<br>'
@@ -1387,9 +1304,29 @@ class CTsourcesTab(InputTab):
     def update_kV_sources(self):
         """Update ComboBox of all rows when list of kV_sources changed from settings."""
         self.kV_source_strings = [x.label for x in self.main.general_values.kV_sources]
+        warnings = []
+        self.blockSignals(True)
         for row in range(self.table.rowCount()):
+            prev_val = self.get_cell_value(row, 3)
             self.table.setCellWidget(row, 3, uir.CellCombo(
                 self, self.kV_source_strings, row=row, col=3))
+            w = self.table.cellWidget(row, 3)
+            if prev_val in self.kV_source_strings:
+                w.setCurrentText(prev_val)
+            else:
+                if prev_val is not None:
+                    warnings.append(
+                        f'kV source ({prev_val}) no longer available. '
+                        f'Please control source in row number {row}.')
+        self.blockSignals(False)
+        if warnings:
+            dlg = messageboxes.MessageBoxWithDetails(
+                self, title='Warnings',
+                msg='Found issues for selected source types',
+                info='See details',
+                icon=QMessageBox.Warning,
+                details=warnings)
+            dlg.exec()
 
     def update_CT_dose(self, update_row=None):
         """Update array containing CT dose and redraw."""
@@ -1399,7 +1336,7 @@ class CTsourcesTab(InputTab):
         for i in range(self.table.rowCount()):
             if self.table_list[i][0]:  # if active
                 tabitem = self.table.cellWidget(i, 2)
-                x, y = self.get_pos_from_text(tabitem.text())
+                x, y = mini_methods.get_pos_from_text(tabitem.text())
                 # TODO ....
         self.main.wFloorDisplay.canvas.floor_draw()
 
@@ -1449,3 +1386,214 @@ class CTsourcesTab(InputTab):
             self.table_list[added_row] = copy.deepcopy(values_above)
             # TODO: change label to one not used yet
             # TODO: update floor display
+
+
+class OTsourcesTab(InputTab):
+    """GUI for adding/editing kV sources with same doserate in all directions."""
+
+    def __init__(self, main):
+        super().__init__(
+            header='Other kV sources',
+            info=(
+                'kV sources for isotropic stray radiation.<br>'
+                '<br>'
+                'Select position of source in floor plan (mouse click).<br>'
+                'Select the row for which you want to set this source position.<br>'
+                'Press the "Get..."-button to fetch the coordinates.<br>'
+                '<br>'
+                'Specify parameters for the sources:<br>'
+                '   - kV source = Select named kV-source as defined in Settings - '
+                'Shield Data<br>'
+                '   - kVp correction = Shield data specified for max kVp, you may '
+                'correct by a effective factor if kVp generally lower<br>'
+                '   - mAs pr patient = total mAs on average pr procedure<br>'
+                '   - # pr workday = average number of procedures pr working day. '
+                'Dose multiplied with number of working days specified above.'
+                ),
+            btn_get_pos_text='Get source coordinates as marked in image')
+
+        self.modality = 'OT'
+        self.label = f'{self.modality} sources'
+        self.main = main
+        self.table.setColumnCount(8)
+        self.table.setHorizontalHeaderLabels(
+            ['Active', 'Source name', 'x,y', 'kV source',
+             'kVp correction', 'mAs pr patient', '# pr workday'])
+        self.empty_row = [True, '', '', self.main.general_values.kV_sources[0],
+                          1.0, 4000, 0.0]
+        self.kV_source_strings = self.main.general_values.kV_sources
+        self.table_list = [copy.deepcopy(self.empty_row)]
+        self.active_row = 0
+        self.table.setColumnWidth(0, 10*self.main.gui.char_width)
+        self.table.setColumnWidth(1, 20*self.main.gui.char_width)
+        self.table.setColumnWidth(2, 13*self.main.gui.char_width)
+        self.table.setColumnWidth(3, 20*self.main.gui.char_width)
+        self.table.setColumnWidth(4, 19*self.main.gui.char_width)
+        self.table.setColumnWidth(5, 19*self.main.gui.char_width)
+        self.table.setColumnWidth(6, 19*self.main.gui.char_width)
+
+        self.table.verticalHeader().setVisible(False)
+        self.add_cell_widgets(0)
+        self.select_row_col(0, 1)
+
+    def add_cell_widgets(self, row):
+        """Add cell widgets to the selected row (new row, default values)."""
+        self.table.setCellWidget(row, 0, uir.InputCheckBox(self, row=row, col=0))
+        self.table.setCellWidget(row, 1, uir.TextCell(self, row=row, col=1))  # name
+        self.table.setCellWidget(row, 2, uir.TextCell(self, row=row, col=2))  # x,y
+        self.table.setCellWidget(row, 3, uir.CellCombo(
+            self, self.kV_source_strings, row=row, col=3))  # kV source
+        self.table.setCellWidget(row, 4, uir.CellSpinBox(
+            self, initial_value=1.,
+            row=row, col=4, max_val=1.0, step=0.1, decimals=2))  # kVp corr
+        self.table.setCellWidget(row, 5, uir.CellSpinBox(
+            self, initial_value=4000, row=row, col=5,
+            max_val=10000, step=100, decimals=0))  # mAs pr pat
+        self.table.setCellWidget(row, 6, uir.CellSpinBox(
+            self, initial_value=30, row=row, col=6, decimals=0))  # pr workday
+
+    def update_kV_sources(self):
+        """Update ComboBox of all rows when list of kV_sources changed from settings."""
+        self.kV_source_strings = [x.label for x in self.main.general_values.kV_sources]
+        warnings = []
+        self.blockSignals(True)
+        for row in range(self.table.rowCount()):
+            prev_val = self.get_cell_value(row, 3)
+            self.table.setCellWidget(row, 3, uir.CellCombo(
+                self, self.kV_source_strings, row=row, col=3))
+            w = self.table.cellWidget(row, 3)
+            if prev_val in self.kV_source_strings:
+                w.setCurrentText(prev_val)
+            else:
+                if prev_val is not None:
+                    warnings.append(
+                        f'kV source ({prev_val}) no longer available. '
+                        f'Please control source in row number {row}.')
+        self.blockSignals(False)
+        if warnings:
+            dlg = messageboxes.MessageBoxWithDetails(
+                self, title='Warnings',
+                msg='Found issues for selected source types',
+                info='See details',
+                icon=QMessageBox.Warning,
+                details=warnings)
+            dlg.exec()
+
+    def update_CT_dose(self, update_row=None):
+        """Update array containing CT dose and redraw."""
+        # if update_row specific only update this else calculate all (when import)
+        # apply wall shielding for each source
+        # now sum
+        for i in range(self.table.rowCount()):
+            if self.table_list[i][0]:  # if active
+                tabitem = self.table.cellWidget(i, 2)
+                x, y = mini_methods.get_pos_from_text(tabitem.text())
+                # TODO ....
+        self.main.wFloorDisplay.canvas.floor_draw()
+
+    def delete_row(self):
+        """Delete selected row."""
+        removed_row = super().delete_row()
+        if removed_row > -1:
+            self.update_source_annotations()
+
+    def add_row(self):
+        """Add row after selected row (or as last row if none selected).
+
+        Returns
+        -------
+        added_row : int
+            index of the new row
+        """
+        added_row = super().add_row()
+        if added_row > -1:
+            self.add_cell_widgets(added_row)
+            # TODO: update floor display
+        return added_row
+
+    def duplicate_row(self):
+        """Duplicate selected row and add as next."""
+        added_row = self.add_row()
+        if added_row > -1:
+            values_above = self.table_list[added_row - 1]
+            for i in range(self.table.columnCount()):
+                self.table.cellWidget(added_row, i).blockSignals(True)
+
+            self.table.cellWidget(added_row, 0).setChecked(values_above[0])
+            self.table.cellWidget(added_row, 1).setText(values_above[1] + '_copy')
+            self.table.cellWidget(added_row, 2).setText(values_above[2])
+            self.table.cellWidget(added_row, 3).setCurrentText(values_above[3])
+            self.table.cellWidget(added_row, 4).setValue(float(values_above[4]))
+            self.table.cellWidget(added_row, 5).setValue(int(values_above[5]))
+            self.table.cellWidget(added_row, 6).setValue(int(values_above[6]))
+
+            for i in range(self.table.columnCount()):
+                self.table.cellWidget(added_row, i).blockSignals(False)
+            self.update_row_number(added_row, 1)
+
+            self.select_row_col(added_row, 1)
+            self.table_list[added_row] = copy.deepcopy(values_above)
+            # TODO: change label to one not used yet
+            # TODO: update floor display
+
+
+class PointsTab(InputTab):
+    """GUI for adding/editing calculation points."""
+
+    def __init__(self, main):
+        super().__init__(
+            header='Calculation points',
+            info=(
+                'Add specific (named) points to tabulate calculated dose.<br>'
+                '<br>'
+                'Select position of source in floor plan (mouse click).<br>'
+                'Select the row for which you want to set this calculation point.<br>'
+                'Press the "Get..."-button to fetch the coordinates.<br>'
+                ),
+            btn_get_pos_text='Get point coordinates as marked in image')
+
+        self.modality = 'OT'
+        self.label = f'{self.modality} sources'
+        self.main = main
+        self.table.setColumnCount(5)
+        self.table.setHorizontalHeaderLabels(
+            ['Active', 'Label', 'x,y',
+             'Total dose (mSv)', 'NM max doserate (' + '\u03bc' + 'Sv/h)'])
+        self.empty_row = [True, '', '', '', '']
+        self.table_list = [copy.deepcopy(self.empty_row)]
+        self.active_row = 0
+        self.table.setColumnWidth(0, 10*self.main.gui.char_width)
+        self.table.setColumnWidth(1, 20*self.main.gui.char_width)
+        self.table.setColumnWidth(2, 13*self.main.gui.char_width)
+        self.table.setColumnWidth(3, 20*self.main.gui.char_width)
+        self.table.setColumnWidth(4, 35*self.main.gui.char_width)
+        self.tb.act_duplicate.setVisible(False)
+
+        self.table.verticalHeader().setVisible(False)
+        self.add_cell_widgets(0)
+        self.select_row_col(0, 1)
+
+    def add_cell_widgets(self, row):
+        """Add cell widgets to the selected row (new row, default values)."""
+        self.table.setCellWidget(row, 0, uir.InputCheckBox(self, row=row, col=0))
+        self.table.setCellWidget(row, 1, uir.TextCell(self, row=row, col=1))  # name
+        self.table.setCellWidget(row, 2, uir.TextCell(self, row=row, col=2))  # x,y
+        self.table.setCellWidget(row, 3, uir.TextCell(self, row=row, col=3))  # dose
+        self.table.setCellWidget(row, 4, uir.TextCell(self, row=row, col=4))  # doserate
+
+    def add_row(self):
+        """Add row after selected row (or as last row if none selected).
+
+        Returns
+        -------
+        added_row : int
+            index of the new row
+        """
+        added_row = super().add_row()
+        if added_row > -1:
+            self.add_cell_widgets(added_row)
+            # TODO: update display
+        return added_row
+
+    def duplicate_row(self):
+        pass  # to make TableToolBar happy

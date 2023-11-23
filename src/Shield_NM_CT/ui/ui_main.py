@@ -29,7 +29,7 @@ from matplotlib.backends.backend_qt5agg import (
 from matplotlib.figure import Figure
 import matplotlib.image as mpimg
 from matplotlib import patches
-from matplotlib.path import Path
+from matplotlib.path import Path as mplPath
 from matplotlib import transforms
 from matplotlib.transforms import Affine2D
 from matplotlib.markers import MarkerStyle
@@ -44,6 +44,7 @@ from Shield_NM_CT.ui import settings
 import Shield_NM_CT.ui.reusable_widgets as uir
 from Shield_NM_CT.ui.ui_dialogs import AboutDialog, EditAnnotationsDialog
 from Shield_NM_CT.scripts.calculate_dose import calculate_dose
+from Shield_NM_CT.scripts import mini_methods
 import Shield_NM_CT.resources
 # Shield_NM_CT block end
 
@@ -89,7 +90,10 @@ class MainWindow(QMainWindow):
         self.image = np.zeros(2)
         self.occ_map = np.zeros(2)
         self.dose_dict = {}  # dictionary holding dose calculations
+        self.nm_dose_map = np.zeros(2)
+        self.nm_doserate_map = np.zeros(2)
         self.ct_dose_map = np.zeros(2)
+        self.ot_dose_map = np.zeros(2)
 
         self.save_blocked = False
         if os.environ[ENV_USER_PREFS_PATH] == '':
@@ -135,13 +139,15 @@ class MainWindow(QMainWindow):
         self.walls_tab = ui_main_tabs.WallsTab(self)
         self.NMsources_tab = ui_main_tabs.NMsourcesTab(self)
         self.CTsources_tab = ui_main_tabs.CTsourcesTab(self)
-        #TODO self.FLsources_tab = ui_main_tabs.FLsources_tab(self)
+        self.OTsources_tab = ui_main_tabs.OTsourcesTab(self)
+        self.points_tab = ui_main_tabs.PointsTab(self)
         self.tabs.addTab(self.scale_tab, "Scale")
         self.tabs.addTab(self.areas_tab, "Areas")
         self.tabs.addTab(self.walls_tab, "Walls")
         self.tabs.addTab(self.NMsources_tab, "NM sources")
         self.tabs.addTab(self.CTsources_tab, "CT sources")
-        #TODOself.tabs.addTab(self.FLsources_tab, "Fluoro sources")
+        self.tabs.addTab(self.OTsources_tab, "Other kV sources")
+        self.tabs.addTab(self.points_tab, "Calculation points")
         self.tabs.currentChanged.connect(self.new_tab_selection)
 
         bbox = QHBoxLayout()
@@ -225,6 +231,7 @@ class MainWindow(QMainWindow):
         _, _, self.ct_doserates = cff.load_settings(fname='ct_doserates')
         _, _, self.shield_data = cff.load_settings(fname='shield_data')
         _, _, self.general_values = cff.load_settings(fname='general_values')
+        _, _, self.colormaps = cff.load_settings(fname='colormaps')
 
         if after_edit_settings:
             self.NMsources_tab.update_isotopes()
@@ -275,15 +282,66 @@ class MainWindow(QMainWindow):
                 details=msgs)
             dlg.exec()
         if status:
+            self.sum_dose_days()
             if 'Dose' not in self.overlay_text():
                 self.wVisual.btns_overlay.button(2).setChecked(True)
             else:
                 self.wFloorDisplay.canvas.update_dose_overlay()
 
-    def update_dose_days(self):
-        #TODO - number of working days changed - update dose if exists
-        #self.wCalculate.working_days.value()
-        pass
+    def sum_dose_days(self):
+        """Sum dose on number of working days changed."""
+        if self.dose_dict:
+            wd = self.wCalculate.working_days.value()
+            if 'dose_NM' in self.dose_dict:
+                dd = self.dose_dict['dose_NM']
+                self.nm_dose_map = np.zeros(self.occ_map.shape)
+                self.nm_doserate_map = np.zeros(self.occ_map.shape)
+                for i, df in enumerate(dd['dose_factors']):
+                    temp = dd['transmission_maps'][i] / dd['dist_maps'][i]**2
+                    nm_dose_map_this = wd * df * self.occ_map * temp
+                    self.nm_dose_map = self.nm_dose_map + nm_dose_map_this
+                    nm_doserate_map_this = dd['doserate_max_factors'][i] * temp
+                    self.nm_doserate_map = self.nm_doserate_map + nm_doserate_map_this
+            if 'dose_CT' in self.dose_dict:
+                dd = self.dose_dict['dose_CT']
+                self.ct_dose_map = np.zeros(self.occ_map.shape)
+                for i, df in enumerate(dd['dose_factors']):
+                    temp = dd['transmission_maps'][i] * dd['unshielded_maps'][i]**2
+                    ct_dose_map_this = wd * df * self.occ_map * temp
+                    self.ct_dose_map = self.ct_dose_map + ct_dose_map_this
+            if 'dose_OT' in self.dose_dict:
+                dd = self.dose_dict['dose_OT']
+                self.ot_dose_map = np.zeros(self.occ_map.shape)
+                for i, df in enumerate(dd['dose_factors']):
+                    temp = dd['transmission_maps'][i] / dd['dist_maps'][i]**2
+                    ot_dose_map_this = wd * df * self.occ_map * temp
+                    self.ot_dose_map = self.ot_dose_map + ot_dose_map_this
+            self.update_calculation_points()
+            self.wFloorDisplay.canvas.update_dose_overlay()
+
+    def update_calculation_points(self):
+        """Update dose to calculation points."""
+        if self.dose_dict:
+            for i, point in enumerate(self.points_tab.table_list):
+                x, y = mini_methods.get_pos_from_text(point[2])
+                dose = (
+                    self.nm_dose_map[y, x]
+                    + self.ct_dose_map[y, x]
+                    + self.ot_dose_map[y, x]
+                    )
+                if dose > 0:
+                    dose_string = f'{dose:.4f}'
+                else:
+                    dose_string = '0'
+                self.points_tab.table_list[i][3] = dose_string
+                self.points_tab.table.cellWidget(i, 3).setText(dose_string)
+                doserate = self.nm_doserate_map[y, x]
+                if doserate > 0:
+                    dose_string = f'{doserate:.2f}'
+                else:
+                    dose_string = '0'
+                self.points_tab.table_list[i][4] = dose_string
+                self.points_tab.table.cellWidget(i, 4).setText(dose_string)
 
     def keyReleaseEvent(self, event):
         """Trigger get_pos when Enter/Return pressed."""
@@ -406,19 +464,45 @@ class MainWindow(QMainWindow):
         dlg.setFileMode(QFileDialog.Directory)
         dlg.setDirectory(self.user_prefs.default_path)
         if dlg.exec():
-            self.reset_all()
             fname = dlg.selectedFiles()
             path = Path(os.path.normpath(fname[0]))
             files = [x for x in path.glob('*')]
             file_bases = [x.stem for x in files]
+            self.reset_all()
             if 'floorplan' in file_bases:
                 idx = file_bases.index('floorplan')
                 self.gui.image_path = files[idx].resolve().as_posix()
                 self.wFloorDisplay.canvas.floor_draw()
+            if 'scale' in file_bases:
+                idx = file_bases.index('scale')
+                self.scale_tab.import_csv(
+                    path=files[idx].resolve().as_posix(),
+                    ncols_expected=len(self.scale_tab.empty_row)+1)
+                self.gui.scale_length = self.scale_tab.table_list[0][-1]
+                self.scale_tab.update_scale()
             if 'areas' in file_bases:
                 idx = file_bases.index('areas')
-                self.areas_tab.import_csv(path=files[idx].resolve().as_posix())
+                self.areas_tab.import_csv(
+                    path=files[idx].resolve().as_posix(),
+                    ncols_expected=len(self.areas_tab.empty_row)+1)
                 self.areas_tab.update_occ_map()
+            if 'walls' in file_bases:
+                idx = file_bases.index('walls')
+                self.walls_tab.import_csv(
+                    path=files[idx].resolve().as_posix(),
+                    ncols_expected=len(self.walls_tab.empty_row)+1)
+                self.walls_tab.update_wall_annotations()
+            if 'NMsources' in file_bases:
+                idx = file_bases.index('NMsources')
+                self.NMsources_tab.import_csv(
+                    path=files[idx].resolve().as_posix(),
+                    ncols_expected=len(self.NMsources_tab.empty_row)+1)
+            if 'CTsources' in file_bases:
+                idx = file_bases.index('CTsources')
+                self.CTsources_tab.import_csv(
+                    path=files[idx].resolve().as_posix(),
+                    ncols_expected=len(self.CTsources_tab.empty_row)+1)
+            self.NMsources_tab.update_source_annotations()
 
     def save_project(self, save_as=False):
         """Save image and tables in folder or update if loaded from folder.
@@ -444,14 +528,20 @@ class MainWindow(QMainWindow):
         if path != '':
             if os.access(path, os.W_OK):
                 # overwrite floorplan image and csv tables
-                imgPath = Path(self.gui.image_path)
-                if imgPath.parent != Path(path):
-                    shutil.copyfile(
-                        self.gui.image_path,
-                        os.path.join(path, f'floorplan{imgPath.suffix}'))
+                if self.gui.image_path:
+                    image_path = Path(self.gui.image_path)
+                    if image_path.parent != Path(path):
+                        shutil.copyfile(
+                            self.gui.image_path,
+                            os.path.join(path, f'floorplan{image_path.suffix}'))
+                self.scale_tab.export_csv(
+                    path=os.path.join(path, 'scale.csv'))
                 self.areas_tab.export_csv(
                     path=os.path.join(path, 'areas.csv'))
-                # TODO - other tables too
+                self.walls_tab.export_csv(
+                    path=os.path.join(path, 'walls.csv'))
+                self.NMsources_tab.export_csv(
+                    path=os.path.join(path, 'NMsources.csv'))
             else:
                 QMessageBox.warning(
                     self, 'Failed saving', f'No writing permission for {path}')
@@ -998,7 +1088,6 @@ class FloorCanvas(FigureCanvasQTAgg):
                     p.set_markeredgewidth(0)
             except ValueError:
                 pass
-        print('wall hightlight')
         self.draw_idle()
 
     def sourcepos_highlight(self):
@@ -1024,8 +1113,8 @@ class FloorCanvas(FigureCanvasQTAgg):
            (-0.15, -1.0), (-0.15, -0.15), (-0.45, -0.15), (-0.45, 0.15),
            (0.45, 0.15)
         ])
-        codes = [Path.MOVETO] + [Path.LINETO]*(len(verts) - 2) + [Path.CLOSEPOLY]
-        marker = Path(verts, codes)
+        codes = [mplPath.MOVETO] + [mplPath.LINETO]*(len(verts) - 2) + [mplPath.CLOSEPOLY]
+        marker = mplPath(verts, codes)
 
         correction_factor = 1.
         if rotation != 0:
@@ -1086,6 +1175,7 @@ class FloorCanvas(FigureCanvasQTAgg):
             row = int(row_txt)
         except ValueError:
             row = None
+
         if row is not None:
             text = ''
             table_list = self.main.tabs.currentWidget().table_list
@@ -1177,7 +1267,7 @@ class FloorCanvas(FigureCanvasQTAgg):
             xnow = round(self.main.gui.x1)
             ynow = round(self.main.gui.y1)
             row = int(self.hovered_artist.get_gid())
-            x0, y0, x1, y1 = self.main.walls_tab.get_wall_from_text(
+            x0, y0, x1, y1 = mini_methods.get_wall_from_text(
                 self.main.walls_tab.table_list[row][2])
             start = True if 'start' in gid_handle else False
             if start:
@@ -1214,6 +1304,35 @@ class FloorCanvas(FigureCanvasQTAgg):
             round(self.main.gui.y1)
             )
         self.draw_idle()
+
+    def get_dose_overlay(self):
+        """Update overlay coupled to dose or doserate."""
+        overlay_string = self.main.wVisual.overlay_text()
+        overlay = np.zeros(self.main.occ_map.shape)
+        if overlay_string == 'Dose':
+            dose_no = self.main.wVisual.btns_dose.checkedId()
+            if dose_no == 0:
+                overlay = (
+                    self.main.nm_dose_map
+                    + self.main.ct_dose_map
+                    + self.main.ot_dose_map
+                    )
+            elif dose_no == 1:
+                overlay = self.main.nm_dose_map
+            elif dose_no == 2:
+                overlay = self.main.ct_dose_map
+            elif dose_no == 3:
+                overlay = self.main.ot_dose_map
+        else:
+            overlay = self.main.nm_doserate_map
+        return overlay
+
+    def update_dose_overlay(self):
+        """Update GUI with current dose overlay."""
+        overlay = self.get_dose_overlay()
+        self.image_overlay.set(
+            cmap='rainbow', alpha=self.main.gui.alpha_overlay, clim=(0., 1.))
+        self.main.wFloorDisplay.canvas.draw_idle()
 
     def floor_draw(self):
         """Draw or redraw all elements."""
@@ -1396,11 +1515,13 @@ class InfoToolBar(QWidget):
         self.lbl_dose_nm = QLabel('NM dose = - mSv')
         self.lbl_doserate_nm = QLabel('NM doserate = - ' + '\u03bc' + 'Sv/h')
         self.lbl_dose_ct = QLabel('CT dose = - mSv')
+        self.lbl_dose_ot = QLabel('Other dose = - mSv')
         vlo.addWidget(self.lbl_occ)
         vlo.addWidget(self.lbl_dose_total)
         vlo.addWidget(self.lbl_dose_nm)
         vlo.addWidget(self.lbl_doserate_nm)
         vlo.addWidget(self.lbl_dose_ct)
+        vlo.addWidget(self.lbl_dose_ot)
         vlo.addStretch()
 
         canvas.mpl_connect('motion_notify_event', self.on_move)
@@ -1412,17 +1533,25 @@ class InfoToolBar(QWidget):
             ypos = round(event.ydata)
             self.lbl_occ.setText(
                 f'Occupancy factor = {self.main.occ_map[ypos, xpos]:.2f}')
-            fix = 'not implemented'
-            self.lbl_dose_total.setText('Total dose = {fix} mSv')
-            self.lbl_dose_nm.setText('NM dose = {fix} mSv')
-            self.lbl_doserate_nm.setText('NM doserate = {fix} ' + '\u03bc' + 'Sv/h')
-            self.lbl_dose_ct.setText('CT dose = {fix} mSv')
+            if self.main.dose_dict:
+                dose_nm = self.main.nm_dose_map[ypos, xpos]
+                dose_ct = self.main.ct_dose_map[ypos, xpos]
+                dose_ot = self.main.ot_dose_map[ypos, xpos]
+                dose_sum = dose_nm + dose_ct + dose_ot
+                doserate_nm = self.main.nm_doserate_map[ypos, xpos]
+                self.lbl_dose_total.setText(f'Total dose = {dose_sum:.3f} mSv')
+                self.lbl_dose_nm.setText(f'NM dose = {dose_nm:.3f} mSv')
+                self.lbl_doserate_nm.setText(
+                    f'NM doserate = {doserate_nm:.3f} ' + '\u03bc' + 'Sv/h')
+                self.lbl_dose_ct.setText(f'CT dose = {dose_ct:.3f} mSv')
+                self.lbl_dose_ot.setText(f'Other dose = {dose_ot:.3f} mSv')
         else:
             self.lbl_occ.setText('Occupancy factor =')
             self.lbl_dose_total.setText('Total dose = - mSv')
             self.lbl_dose_nm.setText('NM dose = - mSv')
             self.lbl_doserate_nm.setText('NM doserate = - ' + '\u03bc' + 'Sv/h')
             self.lbl_dose_ct.setText('CT dose = - mSv')
+            self.lbl_dose_ot.setText('Other dose = - mSv')
 
 
 class VisualizationWidget(QWidget):
@@ -1473,7 +1602,7 @@ class VisualizationWidget(QWidget):
                 'Total dose',
                 'NM dose',
                 'CT dose',
-                'Fluoro dose']):
+                'Other dose']):
             rbtn = QRadioButton(txt)
             self.btns_dose.addButton(rbtn, i)
             vlo.addWidget(rbtn)
@@ -1530,7 +1659,7 @@ class VisualizationWidget(QWidget):
             self.main.wFloorDisplay.canvas.remove_scale()
 
         if 'Areas' in txts:
-            self.main.areas_tab.update_occ_map()
+            self.main.areas_tab.update_occ_map(update_overlay=False)
         else:
             if len(self.main.wFloorDisplay.canvas.ax.patches) > 0:
                 for patch in self.main.wFloorDisplay.canvas.ax.patches:
@@ -1555,6 +1684,11 @@ class VisualizationWidget(QWidget):
             self.main.wFloorDisplay.canvas.draw_idle()
         else:
             remove_modalities.append('NM')
+        if 'CT sources' in txts:
+            self.main.CTsources_tab.update_source_annotations()
+            self.main.wFloorDisplay.canvas.draw_idle()
+        else:
+            remove_modalities.append('CT')
 
         if len(remove_modalities):
             for line in self.main.wFloorDisplay.canvas.ax.lines:
@@ -1577,11 +1711,15 @@ class VisualizationWidget(QWidget):
             vmin = 0.
             vmax = 1.
         elif self.overlay_text() == 'Dose':
-            self.main.wFloorDisplay.canvas.update_dose_overlay()
-            overlay = None
+            overlay = self.main.wFloorDisplay.canvas.update_dose_overlay()
+            cmap = 'rainbow'  #TODO user set distinct values default 0, 0.25, 1
+            vmin = 0
+            vmax = np.max(overlay)  # TODO?
         else:  # Doserate max NM
-            #TODO overlay = self.main.dose_dict[]
-            pass
+            overlay = self.main.wFloorDisplay.canvas.update_dose_overlay()
+            cmap = 'rainbow'  #TODO user set distinct values default 0, 1, 7.5
+            vmin = 0
+            vmax = np.max(overlay)  # TODO?
         if overlay is not None:
             self.main.wFloorDisplay.canvas.image_overlay.set_data(overlay)
             self.main.wFloorDisplay.canvas.image_overlay.set(cmap=cmap)
@@ -1658,7 +1796,7 @@ class CalculateWidget(QWidget):
         self.working_days = QSpinBox(minimum=1, maximum=1000,
                                      value=self.main.general_values.working_days)
         self.working_days.editingFinished.connect(
-            self.main.update_dose_days)
+            self.main.sum_dose_days)
         hlo_working_days = QHBoxLayout()
         hlo_working_days.addWidget(QLabel('Sum dose (mSv) for '))
         hlo_working_days.addWidget(self.working_days)
@@ -1681,7 +1819,7 @@ class CalculateWidget(QWidget):
 
         vlo.addSpacing(20)
         btn_calculate = QPushButton('Calculate dose')
-        btn_calculate.toggled.connect(self.main.calculate_dose)
+        btn_calculate.clicked.connect(self.main.calculate_dose)
         hlo_calc = QHBoxLayout()
         vlo.addLayout(hlo_calc)
         hlo_calc.addWidget(self.gb_floor)

@@ -383,6 +383,9 @@ def load_settings(fname='', temp_config_folder=''):
                             elif fname == 'shield_data':
                                 updated_doc = verify_input_dict(doc, cfc.ShieldData())
                                 settings.append(cfc.ShieldData(**updated_doc))
+                            elif fname == 'colormaps':
+                                updated_doc = verify_input_dict(doc, cfc.ColorMap())
+                                settings.append(cfc.ColorMap(**updated_doc))
                 except OSError as error:
                     print(f'config_func.py load_settings {fname}: {str(error)}')
                     return_default = True

@@ -96,6 +96,14 @@ class ShieldData:
     alpha: float = 0.0
     beta: float = 0.0
     gamma: float = 0.0
+    hvl1: float = 0.0
+    hvl2: float = 0.0
     tvl1: float = 0.0
     tvl2: float = 0.0
-    tvle: float = 0.0
+
+@dataclass
+class ColorMap:
+    """Dose (mSv) or doserate (uSv) values and colors to generate colormaps."""
+
+    label: str = ''
+    table: list = field(default_factory=list)  # [[dose, #rrggbb],[dose2, #rrggbb],...]

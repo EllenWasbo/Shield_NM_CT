@@ -4,6 +4,7 @@
 		<file alias="isotopes.yaml">config_defaults\isotopes.yaml</file>
 		<file alias="materials.yaml">config_defaults\materials.yaml</file>
 		<file alias="shield_data.yaml">config_defaults\shield_data.yaml</file>
+		<file alias="colormaps.yaml">config_defaults\colormaps.yaml</file>
 		<file alias="ct_doserates.yaml">config_defaults\ct_doserates.yaml</file>
 	</qresource>
 	<qresource prefix="icons">

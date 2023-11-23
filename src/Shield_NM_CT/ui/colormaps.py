@@ -8,13 +8,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 
-def register_cmaps():
+def register_cmaps(name, colors):
     """Register colormaps for use in program."""
-    # get colormap
-    ncolors = 256
-
-    color_array = plt.get_cmap('rainbow')(range(ncolors))
-    color_array[:, -1] = np.linspace(0.,1., ncolors)
+    #colors = [(1, 0, 0), (0, 1, 0), (0, 0, 1)]  # RGB
     map_object = LinearSegmentedColormap.from_list(
-        name='rainbow_alpha', colors=color_array)
+        name, colors, n_bin=len(colors))
     plt.register_cmap(cmap=map_object)

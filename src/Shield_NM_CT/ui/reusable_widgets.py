@@ -519,7 +519,9 @@ class TextCell(QLineEdit):
     def __init__(self, parent, initial_text='', row=-1, col=-1):
         super().__init__(initial_text)
         self.parent = parent
-        self.textEdited.connect(lambda: self.parent.cell_changed(self.row, self.col))
+        # self.textEdited.connect(lambda: self.parent.cell_changed(self.row, self.col))
+        self.editingFinished.connect(
+            lambda: self.parent.cell_changed(self.row, self.col))
         self.row = row
         self.col = col
 
@@ -625,6 +627,31 @@ class CellCombo(QComboBox):
 
     def focusInEvent(self, event):
         """Notify InputTab (ui_main) which cell selected."""
+        self.parent.cell_selection_changed(self.row, self.col)
+        super().focusInEvent(event)
+
+    def keyReleaseEvent(self, event):
+        """Avoid pressed return trigger get_pos from InputTab (ui_main)."""
+        if isinstance(event, QKeyEvent):
+            if event.key() == Qt.Key_Return:
+                pass
+            else:
+                super().keyReleaseEvent(event)
+
+
+class ColorCell(QLabel):
+    """Colored label for visualizing color settings."""
+
+    def __init__(self, parent, initial_color='#000000', row=-1, col=-1):
+        super().__init__('    ')
+        self.parent = parent
+        self.setStyleSheet(
+            f'QLabel{{background-color: {initial_color};}}')
+        self.row = row
+        self.col = col
+
+    def focusInEvent(self, event):
+        """Notify parent which cell selected."""
         self.parent.cell_selection_changed(self.row, self.col)
         super().focusInEvent(event)
 

@@ -34,3 +34,58 @@ alpha: 0.1539
 beta: -0.1161
 gamma: 2.0752
 ---
+isotope: 'Tc-99m'
+material: Lead
+hvl1: 0.4
+hvl2: 0.3
+tvl1: 1.1
+tvl2: 1.0
+---
+isotope: 'Tc-99m'
+material: Concrete
+hvl1: 84.3
+hvl2: 30.5
+tvl1: 151.0
+tvl2: 83.2
+---
+isotope: 'I-123'
+material: Lead
+hvl1: 0.059
+hvl2: 0.591
+tvl1: 1.4
+tvl2: 12.3
+---
+isotope: 'I-123'
+material: Concrete
+hvl1: 58.9
+hvl2: 41.3
+tvl1: 144.5
+tvl2: 105.3
+---
+isotope: 'I-131'
+material: Lead
+hvl1: 3.9
+hvl2: 3.1
+tvl1: 11.6
+tvl2: 16.8
+---
+isotope: 'I-131'
+material: Concrete
+hvl1: 118
+hvl2: 49.8
+tvl1: 225.9
+tvl2: 134.1
+---
+isotope: 'Lu-177'
+material: Lead
+hvl1: 0.8
+hvl2: 0.73
+tvl1: 2.5
+tvl2: 2.77
+---
+isotope: 'Lu-177'
+material: Concrete
+hvl1: 98.9
+hvl2: 36.6
+tvl1: 179.1
+tvl2: 101.3

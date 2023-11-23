@@ -294,6 +294,15 @@ class StackWidget(QWidget):
                   more_fnames=more_fnames, log=log)
         self.refresh_templist(selected_label=newlabel)
 
+    def verify_save(self, fname, lastload):
+        """Verify that save is possible and not in conflict with other users."""
+        proceed = cff.verify_config_folder(self)
+        if proceed:
+            proceed, errmsg = cff.check_save_conflict(fname, lastload)
+            if errmsg != '':
+                proceed = messageboxes.proceed_question(self, errmsg)
+        return proceed
+
     def save(self, save_more=False, more=None, more_fnames=None, log=[]):
         """Save template and other connected templates if needed.
 

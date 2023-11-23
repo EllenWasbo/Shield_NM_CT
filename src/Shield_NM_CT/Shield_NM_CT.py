@@ -78,7 +78,7 @@ if __name__ == '__main__':
         splash_img, Qt.WindowStaysOnTopHint)
     splash.show()
 
-    register_cmaps()
+    #register_cmaps()
 
     app.setStyle('Fusion')
     if user_prefs.dark_mode:

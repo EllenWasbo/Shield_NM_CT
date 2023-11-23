@@ -17,14 +17,14 @@ gamma_ray_constant: 0.041
 patient_constant: 0.015
 ---
 label: I-131
-half_life: 193
-half_life_unit: hours
+half_life: 8.023
+half_life_unit: days
 gamma_ray_constant: 0.0575
 patient_constant: 0.023
 ---
 label: Lu-177
-half_life: 161.5
-half_life_unit: hours
+half_life: 6.65
+half_life_unit: days
 gamma_ray_constant: 0.00517
 patient_constant: 0.0026
 ---
