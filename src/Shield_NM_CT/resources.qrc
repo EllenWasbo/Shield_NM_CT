@@ -9,6 +9,7 @@
 	</qresource>
 	<qresource prefix="icons">
 		<file alias="add.png">icons\add.png</file>
+		<file alias="colorbar.png">icons\colorbar.png</file>
 		<file alias="copy.png">icons\copy.png</file>
 		<file alias="copy2clipboard.png">icons\copy2clipboard.png</file>
 		<file alias="delete.png">icons\delete.png</file>
@@ -46,6 +47,7 @@
 	</qresource>
 	<qresource prefix="icons_darkmode">
 		<file alias="add.png">icons\darkmode\add.png</file>
+		<file alias="colorbar.png">icons\darkmode\colorbar.png</file>
 		<file alias="copy.png">icons\darkmode\copy.png</file>
 		<file alias="copy2clipboard.png">icons\darkmode\copy2clipboard.png</file>
 		<file alias="delete.png">icons\darkmode\delete.png</file>

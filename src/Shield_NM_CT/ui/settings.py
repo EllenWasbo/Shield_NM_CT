@@ -190,7 +190,6 @@ class UserSettingsWidget(StackWidget):
         super().__init__(main, header, subtxt)
 
         self.config_folder = QLineEdit()
-        self.default_path = QLineEdit()
         self.lbl_user_prefs_path = QLabel()
         self.chk_dark_mode = QCheckBox()
         self.fontsize = QSpinBox()
@@ -206,17 +205,6 @@ class UserSettingsWidget(StackWidget):
             lambda: self.locate_folder(self.config_folder))
         hlo_config_folder.addWidget(toolbar)
         self.vlo.addLayout(hlo_config_folder)
-        self.vlo.addSpacing(50)
-
-        self.default_path.setMinimumWidth(500)
-        hlo_default_path = QHBoxLayout()
-        hlo_default_path.addWidget(QLabel('Default path for loading/saving projects:'))
-        hlo_default_path.addWidget(self.default_path)
-        toolbar = uir.ToolBarBrowse('Browse to set default path')
-        toolbar.act_browse.triggered.connect(
-            lambda: self.locate_folder(self.default_path))
-        hlo_default_path.addWidget(toolbar)
-        self.vlo.addLayout(hlo_default_path)
         self.vlo.addSpacing(50)
 
         hlo_mid = QHBoxLayout()
@@ -267,7 +255,6 @@ class UserSettingsWidget(StackWidget):
         _, path, self.user_prefs = cff.load_user_prefs()
         self.lbl_user_prefs_path.setText('User preferences saved in: ' + path)
         self.config_folder.setText(self.user_prefs.config_folder)
-        self.default_path.setText(self.user_prefs.default_path)
         self.fontsize.setValue(self.user_prefs.fontsize)
         self.chk_dark_mode.setChecked(self.user_prefs.dark_mode)
         self.flag_edit(False)
@@ -276,8 +263,9 @@ class UserSettingsWidget(StackWidget):
         """Get current settings and save to yaml file."""
         if self.user_prefs.config_folder != self.config_folder.text():
             cff.remove_user_from_active_users()
+        config_folder_changed = (
+            self.config_folder.text() != self.user_prefs.config_folder)
         self.user_prefs.config_folder = self.config_folder.text()
-        self.user_prefs.default_path = self.default_path.text()
         self.user_prefs.fontsize = self.fontsize.value()
         self.user_prefs.dark_mode = self.chk_dark_mode.isChecked()
 
@@ -286,6 +274,8 @@ class UserSettingsWidget(StackWidget):
             self.status_label.setText(f'Changes saved to {path}')
             self.flag_edit(False)
             cff.add_user_to_active_users()
+            if config_folder_changed:
+                self.main.update_general_values()
         else:
             QMessageBox.Warning(self, 'Warning',
                                 f'Failed to save changes to {path}')
@@ -369,3 +359,4 @@ class SharedSettingsWidget(StackWidget):
         user_prefs.config_folder = os.path.normpath(folder)
         _, _ = cff.save_user_prefs(user_prefs, parentwidget=self)
         self.update_from_yaml()
+        self.main.update_general_values()

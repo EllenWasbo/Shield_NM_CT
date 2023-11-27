@@ -114,6 +114,8 @@ class InputTab(QWidget):
         if col != 1:  # name
             if self.label == 'Areas':
                 self.update_occ_map()
+                if self.main.dose_dict:
+                    self.main.sum_dose_days()
             elif self.label == 'Walls':
                 if col == 3:  # material label
                     # set default material thickness?
@@ -124,10 +126,18 @@ class InputTab(QWidget):
                     w.setValue(thickness)
                     self.table_list[row][4] = thickness
                     w.blockSignals(False)
-                self.update_current_wall_annotation()
-            elif 'source' in self.label or 'point' in self.label:
+                self.update_wall_annotation(row, remove_already=True)
+                self.highlight_selected_in_image()
+                if self.main.dose_dict:
+                    self.main.reset_dose()  #TODO or calculate dose?
+            elif 'source' in self.label:
                 self.update_current_source_annotation()
-            self.main.reset_dose()
+                if self.main.dose_dict:
+                    self.main.calculate_dose(source_number=row, modality=self.modality)
+            elif self.label == 'point':
+                self.update_current_source_annotation()
+                if self.main.dose_dict:
+                    self.main.sum_dose_days()
 
     def get_pos(self):
         """Get positions for element as defined in figure.
@@ -168,7 +178,7 @@ class InputTab(QWidget):
                     markersize=self.main.gui.annotations_markersize[0],
                     markeredgecolor='red', markeredgewidth=0,
                     picker=self.main.gui.picker,
-                    gid=f'{self.modality}_{i}')
+                    gid=f'{self.modality}_{line_index}')
                 if self.modality == 'CT':
                     canvas.ax.lines[-1].set_marker(
                         canvas.CT_marker(self.table_list[i][5])[0])
@@ -184,6 +194,42 @@ class InputTab(QWidget):
             else:
                 canvas.ax.lines[line_index].remove()
             canvas.draw_idle()
+            
+    def remove_source_annotations(self, all_sources=True, modalities=[]):
+        """Remove annotations for sources.
+
+        Parameters
+        ----------
+        all_sources : bool, optional
+            If true remove all source annotations. The default is True.
+        modalities : list of str
+            specifiec modalities to remove annotations for.
+        """
+        if all_sources:
+            modalities = ['NM', 'CT', 'OT', 'point']
+        else:
+            if len(modalities) == 0:
+                modalities = [self.modality]
+
+        canvas = self.main.wFloorDisplay.canvas
+        index_lines = []
+        if len(canvas.ax.lines) > 0:
+            for i, line in enumerate(canvas.ax.lines):
+                gid = line.get_gid()
+                gid_split = gid.split('_')
+                if len(gid_split) == 2:
+                    if gid_split[0] in modalities:
+                        try:
+                            row = int(gid_split[1])
+                            index_lines.append(i)
+                        except ValueError:
+                            pass
+        # remove all present source-annotations
+        if len(index_lines) > 0:
+            index_lines.reverse()
+            for i in index_lines:
+                canvas.ax.lines[i].remove()
+        canvas.reset_hover_pick()
 
     def update_source_annotations(self, all_sources=True, modalities=[]):
         """Update annotations for sources.
@@ -191,37 +237,18 @@ class InputTab(QWidget):
         Parameters
         ----------
         all_sources : bool, optional
-            If true generate all annotations, else only active. The default is True.
+            If true generate all annotations, else only specific. The default is True.
         modalities : list of str
             'NM', 'CT'
         """
         canvas = self.main.wFloorDisplay.canvas
-        index_lines = []
-        gid_indexes = []
-        if len(canvas.ax.lines) > 0:
-            for i, line in enumerate(canvas.ax.lines):
-                gid = line.get_gid()
-                gid_split = gid.split('_')
-                if len(gid_split) == 2:
-                    try:
-                        row = int(gid_split[1])
-                        index_lines.append(i)
-                        gid_indexes.append(row)
-                    except ValueError:
-                        pass
 
         if all_sources:
-            modalities = ['NM', 'CT']
+            modalities = ['NM', 'CT', 'OT', 'point']
         else:
             if len(modalities) == 0:
                 modalities = [self.modality]
-
-        # remove all present source-annotations
-        if len(index_lines) > 0:
-            index_lines.reverse()
-            for i in index_lines:
-                canvas.ax.lines[i].remove()
-        canvas.reset_hover_pick()
+        self.remove_source_annotations(all_sources=all_sources, modalities=modalities)
 
         for tab_no in range(self.main.tabs.count()):
             proceed = False
@@ -252,8 +279,11 @@ class InputTab(QWidget):
         """Highlight source position in image if positions given."""
         if self.active_row > -1:
             tabitem = self.table.cellWidget(self.active_row, 2)
-            x, y = mini_methods.get_pos_from_text(tabitem.text())
-            self.main.wFloorDisplay.canvas.sourcepos_highlight()
+            try:
+                x, y = mini_methods.get_pos_from_text(tabitem.text())
+                self.main.wFloorDisplay.canvas.sourcepos_highlight()
+            except AttributeError:
+                pass
         else:
             self.main.wFloorDisplay.canvas.draw_idle()  # in case of previous changes
 
@@ -362,6 +392,7 @@ class InputTab(QWidget):
             columnHeaders = []
             for j in range(self.table.model().columnCount()):
                 columnHeaders.append(self.table.horizontalHeaderItem(j).text())
+
             datalist.append(columnHeaders)
 
             for row in range(self.table.rowCount()):
@@ -440,6 +471,7 @@ class InputTab(QWidget):
                             val = ''
                         self.table_list[row][col - 1] = val
                         w.blockSignals(False)
+                self.select_row_col(0, 0)
 
 
 class ScaleTab(InputTab):
@@ -460,28 +492,35 @@ class ScaleTab(InputTab):
         self.label = 'Scale'
         self.main = main
         self.c0 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
-        self.c0.editingFinished.connect(lambda: self.main.reset_dose(floor=0))
+        self.c0.editingFinished.connect(
+            lambda: self.param_changed_from_gui(attribute='c0', floor=0))
         self.c1 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
-        self.c1.editingFinished.connect(lambda: self.main.reset_dose(floor=1))
+        self.c1.editingFinished.connect(
+            lambda: self.param_changed_from_gui(attribute='c1'))
         self.c2 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
-        self.c2.editingFinished.connect(lambda: self.main.reset_dose(floor=2))
+        self.c2.editingFinished.connect(
+            lambda: self.param_changed_from_gui(attribute='c2', floor=2))
         self.h0 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
-        self.h0.editingFinished.connect(lambda: self.main.reset_dose(floor=1))
+        self.h0.editingFinished.connect(
+            lambda: self.param_changed_from_gui(attribute='h0', floor=0))
         self.h1 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
-        self.h1.editingFinished.connect(lambda: self.main.reset_dose(floor=2))
+        self.h1.editingFinished.connect(
+            lambda: self.param_changed_from_gui(attribute='h1', floor=2))
 
         self.shield_mm_above = QDoubleSpinBox(minimum=0, maximum=500, decimals=1)
         self.shield_mm_above.editingFinished.connect(
-            lambda: self.main.reset_dose(floor=2))
+            lambda: self.param_changed_from_gui(attribute='shield_mm_above', floor=2))
         self.shield_material_above = QComboBox()
         self.shield_material_above.currentTextChanged.connect(
-            lambda: self.main.reset_dose(floor=2))
+            lambda: self.param_changed_from_gui(attribute='shield_material_above',
+                                                floor=2))
         self.shield_mm_below = QDoubleSpinBox(minimum=0, maximum=500, decimals=1)
         self.shield_mm_below.editingFinished.connect(
-            lambda: self.main.reset_dose(floor=0))
+            lambda: self.param_changed_from_gui(attribute='shield_mm_below', floor=0))
         self.shield_material_below = QComboBox()
         self.shield_material_below.currentTextChanged.connect(
-            lambda: self.main.reset_dose(floor=0))
+            lambda: self.param_changed_from_gui(attribute='shield_material_below',
+                                                floor=0))
 
         self.tb.setVisible(False)
         self.table.setColumnCount(2)
@@ -534,6 +573,27 @@ class ScaleTab(InputTab):
         self.table.setCellWidget(row, 0, uir.TextCell(self, row=row, col=0))
         self.table.setCellWidget(row, 1, uir.CellSpinBox(
             self, row=row, col=1, max_val=200., step=1.0, decimals=3))
+
+    def param_changed_from_gui(self, attribute='', floor=0):
+        """Update general_values with value from GUI.
+
+        Parameters
+        ----------
+        attribute : str
+            attribute name in general_values
+        """
+        try:
+            content = self.sender.value()
+        except AttributeError:
+            try:
+                content = self.sender.currentText()
+            except AttributeError:
+                content = None
+        if content:
+            setattr(self.main.general_values, attribute, content)
+            if self.main.dose_dict:
+                #self.main.wCalculate.btns_floor.button(floor)
+                self.main.reset_dose()  #TODO or update dose if actual floor?
 
     def get_pos(self):
         """Get line positions as defined in figure."""
@@ -591,6 +651,8 @@ class ScaleTab(InputTab):
         if line_length > 0:
             self.main.gui.calibration_factor = (
                 self.main.gui.scale_length / line_length)
+            self.main.gui.scale_start = (x0, y0)
+            self.main.gui.scale_end = (x1, y1)
             self.main.wFloorDisplay.canvas.add_scale_highlight(
                 x0, y0, x1, y1)
             self.main.CTsources_tab.update_source_annotations()
@@ -740,7 +802,7 @@ class AreasTab(InputTab):
                 areas_this.append(Rectangle(
                     (x0, y0), width, height, edgecolor='blue',
                     linewidth=self.main.gui.annotations_linethick, fill=False,
-                    picker=True, gid=f'{i}'))
+                    picker=True, gid=f'areas_{i}'))
                 self.main.wFloorDisplay.canvas.ax.add_patch(areas_this[-1])
         self.main.wFloorDisplay.canvas.image_overlay.set_data(self.main.occ_map)
         if update_overlay:
@@ -839,7 +901,7 @@ class WallsTab(InputTab):
         self.table.setCellWidget(row, 3, uir.CellCombo(
             self, self.material_strings, row=row, col=3))
         self.table.setCellWidget(row, 4, uir.CellSpinBox(
-            self, initial_value = self.empty_row[4],
+            self, initial_value=self.empty_row[4],
             row=row, col=4, max_val=400., step=1.0))
 
     def update_materials(self):
@@ -967,28 +1029,39 @@ class WallsTab(InputTab):
 
         return linewidth
 
-    def update_current_wall_annotation(self):
-        """Update annotations for active wall."""
-        tabitem = self.table.cellWidget(self.active_row, 2)
-        x0, y0, x1, y1 = mini_methods.get_wall_from_text(tabitem.text())
-
+    def update_wall_annotation(self, row=None, remove_already=False):
+        """Update annotations for given wall number."""
         canvas = self.main.wFloorDisplay.canvas
-        for line in canvas.ax.lines:
-            try:
-                row = int(line.get_gid())
-                if row == self.active_row:
-                    line.remove()
-                    break
-            except ValueError:
-                pass
+        if remove_already:
+            for line in canvas.ax.lines:
+                gid_split = line.get_gid().split('_')
+                if gid_split[0] == 'walls':
+                    try:
+                        if row == int(gid_split[1]):
+                            line.remove()
+                            break
+                    except ValueError:
+                        pass
 
+            for text in canvas.ax.texts:
+                gid_split = line.get_gid().split('_')
+                if gid_split[0] == 'walls':
+                    try:
+                        if row == int(gid_split[1]):
+                            text.remove()
+                            break
+                    except (ValueError, TypeError):
+                        pass
+
+        tabitem = self.table.cellWidget(row, 2)
+        x0, y0, x1, y1 = mini_methods.get_wall_from_text(tabitem.text())
         if any([
                 x0, x1, y0, y1,
-                self.table.cellWidget(self.active_row, 0).isChecked()]):
-            material = self.table.cellWidget(self.active_row, 3).currentText()
+                self.table.cellWidget(row, 0).isChecked()]):
+            material = self.table.cellWidget(row, 3).currentText()
             color = self.get_color_from_material(material)
-            linewidth = self.get_linewidth(
-                material, self.table.cellWidget(self.active_row, 4).value())
+            thickness = self.table.cellWidget(row, 4).value()
+            linewidth = self.get_linewidth(material, thickness)
             canvas.ax.plot(
                 [x0, x1], [y0, y1],
                 linestyle='-', marker='o', fillstyle='none', solid_capstyle='butt',
@@ -996,64 +1069,72 @@ class WallsTab(InputTab):
                 markersize=self.main.gui.annotations_markersize[0],
                 markeredgecolor='blue', markeredgewidth=0,
                 picker=self.main.gui.picker,
-                gid=f'{self.active_row}')
-            self.highlight_selected_in_image()
-        else:
+                gid=f'walls_{row}')
+
+            add_thickness = (
+                True if 'Wall thickness' in self.main.wVisual.annotate_texts()
+                else False
+                )
+
+            if add_thickness:
+                x, y = (x0+x1) // 2, (y0+y1) // 2
+                if x0 == x1:
+                    rotation = 90
+                    x -= linewidth
+                    ha, va = 'right', 'center'
+                else:
+                    rotation = 0
+                    y -= linewidth
+                    ha, va = 'center', 'bottom'
+                canvas.ax.annotate(
+                    f'{thickness:.1f} mm', xy=(x, y), ha=ha, va=va,
+                    rotation=rotation,
+                    fontsize=self.main.gui.annotations_fontsize, color=color,
+                    gid=f'walls_{row}')
+
+        canvas.draw_idle()
+
+    def remove_wall_lines(self):
+        """Remove wall annotation lines."""
+        canvas = self.main.wFloorDisplay.canvas
+        if len(canvas.ax.lines) > 0:
+            for line in canvas.ax.lines:
+                if line.get_gid():
+                    if 'walls' in line.get_gid():
+                        line.remove()
+            canvas.draw_idle()
+
+    def remove_thickness_texts(self):
+        """Remove all wall thickness text annotations."""
+        canvas = self.main.wFloorDisplay.canvas
+        if len(canvas.ax.texts) > 0:
+            for text in canvas.ax.texts:
+                if text.get_gid():
+                    if 'walls' in text.get_gid():
+                        text.remove()
             canvas.draw_idle()
 
     def update_wall_annotations(self):
         """Update annotations for walls."""
+        self.remove_wall_lines()
+        self.remove_thickness_texts()
         canvas = self.main.wFloorDisplay.canvas
-        index_lines = []
-        gid_indexes = []
-        if len(canvas.ax.lines) > 0:
-            for i, line in enumerate(canvas.ax.lines):
-                try:
-                    row = int(line.get_gid())
-                    index_lines.append(i)
-                    gid_indexes.append(row)
-                except ValueError:
-                    pass
-
-        # remove all present wall annotations
-        if len(index_lines) > 0:
-            index_lines.reverse()
-            for i in index_lines:
-                canvas.ax.lines[i].remove()
         canvas.reset_hover_pick()
-
         for i in range(self.table.rowCount()):
-            if self.table_list[i][0]:  # if active
-                tabitem = self.table.cellWidget(i, 2)
-                x0, y0, x1, y1 = mini_methods.get_wall_from_text(tabitem.text())
-                material = self.table.cellWidget(i, 3).currentText()
-                color = self.get_color_from_material(material)
-                linewidth = self.get_linewidth(
-                    material, self.table.cellWidget(i, 4).value())
-                canvas.ax.plot(
-                    [x0, x1], [y0, y1],
-                    linestyle='-', marker='o', fillstyle='none', solid_capstyle='butt',
-                    linewidth=linewidth, color=color,
-                    markersize=self.main.gui.annotations_markersize[0],
-                    markeredgecolor='blue', markeredgewidth=0,
-                    picker=self.main.gui.picker,
-                    gid=f'{i}')
-
+            self.update_wall_annotation(i)
         self.highlight_selected_in_image()
 
     def highlight_selected_in_image(self):
         """Highlight area in image if area positions given."""
         if self.active_row > -1:
-            tabitem = self.table.cellWidget(self.active_row, 2)
-            x0, y0, x1, y1 = mini_methods.get_wall_from_text(tabitem.text())
             self.main.wFloorDisplay.canvas.wall_highlight()
 
     def delete_row(self):
         """Delete selected row."""
         removed_row = super().delete_row()
         if removed_row > -1:
-            pass
-            # TODO:self.main.update_dose()
+            if self.main.dose_dict:
+                self.main.reset_dose()  #TODO or update
 
     def add_row(self):
         """Add row after selected row (or as last row if none selected).
@@ -1256,7 +1337,7 @@ class CTsourcesTab(InputTab):
         self.modality = 'CT'
         self.label = f'{self.modality} sources'
         self.main = main
-        self.table.setColumnCount(10)
+        self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels(
             ['Active', 'Source name', 'x,y', 'kV source', 'Doserate map',
              'Rotation', 'kVp correction', 'mAs pr patient', '# pr workday'])
@@ -1415,7 +1496,7 @@ class OTsourcesTab(InputTab):
         self.modality = 'OT'
         self.label = f'{self.modality} sources'
         self.main = main
-        self.table.setColumnCount(8)
+        self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels(
             ['Active', 'Source name', 'x,y', 'kV source',
              'kVp correction', 'mAs pr patient', '# pr workday'])
@@ -1552,8 +1633,8 @@ class PointsTab(InputTab):
                 ),
             btn_get_pos_text='Get point coordinates as marked in image')
 
-        self.modality = 'OT'
-        self.label = f'{self.modality} sources'
+        self.modality = 'point'
+        self.label = 'point'
         self.main = main
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(

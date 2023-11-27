@@ -14,7 +14,6 @@ class UserPreferences:
     """Class holding local settings."""
 
     config_folder: str = ''
-    default_path: str = ''
     dark_mode: bool = False
     fontsize: int = 9
     annotations_linethick: int = 1
@@ -29,6 +28,8 @@ class LastModified:
     materials: list = field(default_factory=list)
     ct_data: list = field(default_factory=list)
     general_values: list = field(default_factory=list)
+    shield_data: list = field(default_factory=list)
+    colormaps: list = field(default_factory=list)
 
 
 @dataclass
@@ -50,7 +51,6 @@ class GeneralValues:
     shield_material_above: str = 'Concrete'
     shield_mm_below: float = 200.0
     shield_material_below: str = 'Concrete'
-    materials: list[str] = field(default_factory=lambda: ['Lead', 'Concrete'])
     kV_sources: list[str] = field(default_factory=lambda: ['CT 120 kVp', 'CT 140 kVp'])
     csv_separator: str = ';'
     csv_decimal: str = ','

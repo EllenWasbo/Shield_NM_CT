@@ -24,14 +24,14 @@ gamma: 0.519
 ---
 isotope: 'F-18'
 material: Lead
-alpha: 1.5430
-beta: -0.4408
+alpha: 0.15430
+beta: -0.04408
 gamma: 2.136
 ---
 isotope: 'F-18'
 material: Concrete
-alpha: 0.1539
-beta: -0.1161
+alpha: 0.01539
+beta: -0.01161
 gamma: 2.0752
 ---
 isotope: 'Tc-99m'

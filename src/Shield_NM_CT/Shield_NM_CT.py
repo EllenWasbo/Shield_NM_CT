@@ -15,7 +15,6 @@ from PyQt5.QtCore import Qt
 
 # Shield_NM_CT block start
 from Shield_NM_CT.ui.ui_main import MainWindow
-from Shield_NM_CT.ui.colormaps import register_cmaps
 from Shield_NM_CT.ui.ui_dialogs import StartUpDialog
 from Shield_NM_CT.config.Shield_NM_CT_constants import (
     ENV_ICON_PATH, ENV_USER_PREFS_PATH, ENV_CONFIG_FOLDER
@@ -77,8 +76,6 @@ if __name__ == '__main__':
     splash = QSplashScreen(
         splash_img, Qt.WindowStaysOnTopHint)
     splash.show()
-
-    #register_cmaps()
 
     app.setStyle('Fusion')
     if user_prefs.dark_mode:

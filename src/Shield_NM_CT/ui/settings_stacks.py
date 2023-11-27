@@ -209,9 +209,9 @@ class ShieldDataWidget(StackWidget):
         self.fname = 'shield_data'
         self.empty_template = cfc.ShieldData()
 
-        self.alpha = QDoubleSpinBox(minimum=-100, maximum=100., decimals=4)
+        self.alpha = QDoubleSpinBox(minimum=-100, maximum=100., decimals=5)
         self.alpha.valueChanged.connect(lambda: self.flag_edit(True))
-        self.beta = QDoubleSpinBox(minimum=-100, maximum=100., decimals=4)
+        self.beta = QDoubleSpinBox(minimum=-100, maximum=100., decimals=5)
         self.beta.valueChanged.connect(lambda: self.flag_edit(True))
         self.gamma = QDoubleSpinBox(minimum=-100, maximum=100., decimals=4)
         self.gamma.valueChanged.connect(lambda: self.flag_edit(True))
@@ -293,8 +293,8 @@ class ShieldDataWidget(StackWidget):
         self.vlo_temp.addLayout(hlo)
         flo1 = QFormLayout()
         hlo.addLayout(flo1)
-        flo1.addRow(QLabel('\u03b1:'), self.alpha)
-        flo1.addRow(QLabel('\u03b2:'), self.beta)
+        flo1.addRow(QLabel('\u03b1 (mm-1):'), self.alpha)
+        flo1.addRow(QLabel('\u03b2 (mm-1):'), self.beta)
         flo1.addRow(QLabel('\u03b3:'), self.gamma)
         flo2 = QFormLayout()
         hlo.addLayout(flo2)

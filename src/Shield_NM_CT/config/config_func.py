@@ -468,7 +468,7 @@ def update_last_modified(fname=''):
     _, _ = save_settings(last_mod, fname='last_modified')
 
 
-def save_settings(settings, fname=''):
+def save_settings(settings, fname='', temp_config_folder=''):
     """Save settings to yaml file.
 
     Parameters
@@ -477,6 +477,8 @@ def save_settings(settings, fname=''):
         object of a settings dataclass
     fname : str
         filename without folder and extension
+    temp_config_folder : str, Optional
+        path to save settings to if other than config folder
 
     Returns
     -------
@@ -488,14 +490,11 @@ def save_settings(settings, fname=''):
     status = False
     path = ''
 
-    def try_save(input_data, override_path=None):
-        path_to_use = path
+    def try_save(input_data):
         status = False
         try_again = False
-        if override_path is not None:  # for testing/troubleshooting
-            path_to_use = override_path
         try:
-            with open(path_to_use, 'w') as file:
+            with open(path, 'w') as file:
                 if isinstance(input_data, list):
                     yaml.safe_dump_all(
                         input_data, file, default_flow_style=None, sort_keys=False)
@@ -508,11 +507,11 @@ def save_settings(settings, fname=''):
             try_again = True
         except IOError as io_error:
             QMessageBox.warning(None, "Failed saving",
-                                f'Failed saving to {path_to_use} {io_error}')
+                                f'Failed saving to {path} {io_error}')
         if try_again:
             try:
                 input_data = eval(str(input_data))
-                with open(path_to_use, 'w') as file:
+                with open(path, 'w') as file:
                     if isinstance(input_data, list):
                         yaml.safe_dump_all(
                             input_data, file, default_flow_style=None, sort_keys=False)
@@ -522,12 +521,15 @@ def save_settings(settings, fname=''):
                 status = True
             except yaml.YAMLError as yaml_error:
                 QMessageBox.warning(None, 'Failed saving',
-                                    f'Failed saving to {path_to_use} {yaml_error}')
+                                    f'Failed saving to {path} {yaml_error}')
         return status
 
     if fname != '':
         proceed = False
-        path = get_config_filename(fname, force=True)
+        if temp_config_folder:
+            path = temp_config_folder
+        else:
+            path = get_config_filename(fname, force=True)
         if os.access(Path(path).parent, os.W_OK):
             proceed = True
 

@@ -1,11 +1,10 @@
 label: Dose
 table:
-- [0.25, '#00ff00']
-- [0.5, '#0000ff']
+- [0.25, '#ffee06']
+- [0.5, '#ff9925']
 - [1.0, '#ff0000']
 ---
-label: 'Max doserate'
+label: Max doserate
 table:
-- [1, '#00ff00']
-- [7.5, '#0000ff']
----
+- [1, '#ffee06']
+- [7.5, '#ff0000']
