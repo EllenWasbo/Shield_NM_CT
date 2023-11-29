@@ -713,6 +713,7 @@ class ColormapSettingsWidget(StackWidget):
             newrow = self.active_row + 1
             self.update_row_number(newrow, 1)
         self.table.insertRow(newrow)
+        self.add_cell_widgets(newrow)
         self.table_list.insert(newrow, copy.deepcopy(self.empty_row))
         self.select_row_col(newrow, 1)
         return newrow
@@ -729,7 +730,7 @@ class ColormapSettingsWidget(StackWidget):
 
     def cell_changed(self, row, col, decimals=None):
         """Value changed by user input."""
-        value = self.get_cell_value(row, col)
+        value = self.table_list[row][col]
         if decimals:
             value = round(value, decimals)
         self.table_list[row][col] = value

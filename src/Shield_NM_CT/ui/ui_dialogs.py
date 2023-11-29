@@ -278,15 +278,15 @@ class HeightsDialog(ShieldDialog):
 
 
 class EditAnnotationsDialog(ShieldDialog):
-    """Dialog to set annotation settings."""
+    """Dialog to edit annotation settings."""
 
     def __init__(self, annotations=True, annotations_linethick=0,
-                 annotations_fontsize=0, canvas=None):
+                 annotations_fontsize=0, picker=0, snap_radius=0, canvas=None):
         super().__init__()
         self.canvas = canvas
 
         self.setWindowTitle('Set annotations')
-        self.setMinimumHeight(300)
+        self.setMinimumHeight(400)
         self.setMinimumWidth(300)
 
         vlo = QVBoxLayout()
@@ -316,6 +316,16 @@ class EditAnnotationsDialog(ShieldDialog):
                 )
         fLO.addRow(QLabel('Font size'), self.spin_font)
 
+        self.spin_picker = QSpinBox()
+        self.spin_picker.setRange(0, 100)
+        self.spin_picker.setValue(picker)
+        fLO.addRow(QLabel('Picker radius'), self.spin_picker)
+
+        self.spin_snap_radius = QSpinBox()
+        self.spin_snap_radius.setRange(0, 100)
+        self.spin_snap_radius.setValue(snap_radius)
+        fLO.addRow(QLabel('Sap radius'), self.spin_snap_radius)
+
         buttons = QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         self.buttonBox = QDialogButtonBox(buttons)
         self.buttonBox.accepted.connect(self.accept)
@@ -333,9 +343,15 @@ class EditAnnotationsDialog(ShieldDialog):
             linethick
         int
             fontsize
+        int
+            picker
+        int
+            snap_radius
         """
         return (
             self.chk_annotations.isChecked(),
             self.spin_line.value(),
-            self.spin_font.value()
+            self.spin_font.value(),
+            self.spin_picker.value(),
+            self.spin_snap_radius.value()
             )

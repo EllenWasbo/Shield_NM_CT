@@ -493,34 +493,32 @@ class ScaleTab(InputTab):
         self.main = main
         self.c0 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
         self.c0.editingFinished.connect(
-            lambda: self.param_changed_from_gui(attribute='c0', floor=0))
+            lambda: self.param_changed_from_gui(attribute='c0'))
         self.c1 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
         self.c1.editingFinished.connect(
             lambda: self.param_changed_from_gui(attribute='c1'))
         self.c2 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
         self.c2.editingFinished.connect(
-            lambda: self.param_changed_from_gui(attribute='c2', floor=2))
+            lambda: self.param_changed_from_gui(attribute='c2'))
         self.h0 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
         self.h0.editingFinished.connect(
-            lambda: self.param_changed_from_gui(attribute='h0', floor=0))
+            lambda: self.param_changed_from_gui(attribute='h0'))
         self.h1 = QDoubleSpinBox(minimum=0, maximum=10, decimals=3)
         self.h1.editingFinished.connect(
-            lambda: self.param_changed_from_gui(attribute='h1', floor=2))
+            lambda: self.param_changed_from_gui(attribute='h1'))
 
         self.shield_mm_above = QDoubleSpinBox(minimum=0, maximum=500, decimals=1)
         self.shield_mm_above.editingFinished.connect(
-            lambda: self.param_changed_from_gui(attribute='shield_mm_above', floor=2))
+            lambda: self.param_changed_from_gui(attribute='shield_mm_above'))
         self.shield_material_above = QComboBox()
         self.shield_material_above.currentTextChanged.connect(
-            lambda: self.param_changed_from_gui(attribute='shield_material_above',
-                                                floor=2))
+            lambda: self.param_changed_from_gui(attribute='shield_material_above'))
         self.shield_mm_below = QDoubleSpinBox(minimum=0, maximum=500, decimals=1)
         self.shield_mm_below.editingFinished.connect(
-            lambda: self.param_changed_from_gui(attribute='shield_mm_below', floor=0))
+            lambda: self.param_changed_from_gui(attribute='shield_mm_below'))
         self.shield_material_below = QComboBox()
         self.shield_material_below.currentTextChanged.connect(
-            lambda: self.param_changed_from_gui(attribute='shield_material_below',
-                                                floor=0))
+            lambda: self.param_changed_from_gui(attribute='shield_material_below'))
 
         self.tb.setVisible(False)
         self.table.setColumnCount(2)
@@ -574,7 +572,7 @@ class ScaleTab(InputTab):
         self.table.setCellWidget(row, 1, uir.CellSpinBox(
             self, row=row, col=1, max_val=200., step=1.0, decimals=3))
 
-    def param_changed_from_gui(self, attribute='', floor=0):
+    def param_changed_from_gui(self, attribute=''):
         """Update general_values with value from GUI.
 
         Parameters
@@ -583,17 +581,22 @@ class ScaleTab(InputTab):
             attribute name in general_values
         """
         try:
-            content = self.sender.value()
+            content = self.sender().value()
         except AttributeError:
             try:
-                content = self.sender.currentText()
+                content = self.sender().currentText()
             except AttributeError:
                 content = None
         if content:
             setattr(self.main.general_values, attribute, content)
             if self.main.dose_dict:
-                #self.main.wCalculate.btns_floor.button(floor)
-                self.main.reset_dose()  #TODO or update dose if actual floor?
+                reset_dose = False
+                if self.main.wCalculate.chk_correct_thickness_geometry.isChecked():
+                    reset_dose = True
+                elif isinstance(content, str):
+                    reset_dose = True
+                if reset_dose:
+                    self.main.reset_dose()
 
     def get_pos(self):
         """Get line positions as defined in figure."""
@@ -781,30 +784,31 @@ class AreasTab(InputTab):
 
     def update_occ_map(self, update_overlay=True):
         """Update array containing occupation factors and redraw."""
-        # reset occ_map, rectangle annotations and related parameters
         self.main.occ_map = np.ones(self.main.image.shape[0:2])
-        if len(self.main.wFloorDisplay.canvas.ax.patches) > 0:
-            index_patches = []
-            for i, patch in enumerate(self.main.wFloorDisplay.canvas.ax.patches):
-                index_patches.append(i)
-            if len(index_patches) > 0:
-                index_patches.reverse()
-                for i in index_patches:
-                    self.main.wFloorDisplay.canvas.ax.patches[i].remove()
-        self.main.wFloorDisplay.canvas.reset_hover_pick()
+        if self.main.gui.current_floor == 1:
+            if len(self.main.wFloorDisplay.canvas.ax.patches) > 0:
+                index_patches = []
+                for i, patch in enumerate(self.main.wFloorDisplay.canvas.ax.patches):
+                    index_patches.append(i)
+                if len(index_patches) > 0:
+                    index_patches.reverse()
+                    for i in index_patches:
+                        self.main.wFloorDisplay.canvas.ax.patches[i].remove()
+            self.main.wFloorDisplay.canvas.reset_hover_pick()
 
-        areas_this = []
-        for i in range(self.table.rowCount()):
-            if self.table_list[i][0]:  # if active
-                tabitem = self.table.cellWidget(i, 2)
-                x0, y0, width, height = mini_methods.get_area_from_text(tabitem.text())
-                self.main.occ_map[y0:y0+height, x0:x0+width] = self.table_list[i][3]
-                areas_this.append(Rectangle(
-                    (x0, y0), width, height, edgecolor='blue',
-                    linewidth=self.main.gui.annotations_linethick, fill=False,
-                    picker=True, gid=f'areas_{i}'))
-                self.main.wFloorDisplay.canvas.ax.add_patch(areas_this[-1])
-        self.main.wFloorDisplay.canvas.image_overlay.set_data(self.main.occ_map)
+            areas_this = []
+            for i in range(self.table.rowCount()):
+                if self.table_list[i][0]:  # if active
+                    tabitem = self.table.cellWidget(i, 2)
+                    x0, y0, width, height = mini_methods.get_area_from_text(
+                        tabitem.text())
+                    self.main.occ_map[y0:y0+height, x0:x0+width] = self.table_list[i][3]
+                    areas_this.append(Rectangle(
+                        (x0, y0), width, height, edgecolor='blue',
+                        linewidth=self.main.gui.annotations_linethick, fill=False,
+                        picker=True, gid=f'areas_{i}'))
+                    self.main.wFloorDisplay.canvas.ax.add_patch(areas_this[-1])
+            self.main.wFloorDisplay.canvas.image_overlay.set_data(self.main.occ_map)
         if update_overlay:
             self.main.wFloorDisplay.canvas.image_overlay.set(
                 cmap='rainbow', alpha=self.main.gui.alpha_overlay, clim=(0., 1.))

@@ -13,7 +13,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QStackedWidget,
-    QVBoxLayout, QHBoxLayout, QGroupBox,
+    QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox,
     QLabel, QLineEdit, QPushButton, QSpinBox, QCheckBox,
     QListWidget, QMessageBox, QFileDialog
     )
@@ -193,6 +193,10 @@ class UserSettingsWidget(StackWidget):
         self.lbl_user_prefs_path = QLabel()
         self.chk_dark_mode = QCheckBox()
         self.fontsize = QSpinBox()
+        self.annotations_linethick = QSpinBox()
+        self.annotations_fontsize = QSpinBox()
+        self.picker = QSpinBox()
+        self.snap_radius = QSpinBox()
 
         self.vlo.addWidget(self.lbl_user_prefs_path)
 
@@ -209,7 +213,10 @@ class UserSettingsWidget(StackWidget):
 
         hlo_mid = QHBoxLayout()
         vlo_1 = QVBoxLayout()
+        vlo_2 = QVBoxLayout()
         hlo_mid.addLayout(vlo_1)
+        hlo_mid.addSpacing(20)
+        hlo_mid.addLayout(vlo_2)
         self.vlo.addLayout(hlo_mid)
 
         gb_gui = QGroupBox('GUI settings')
@@ -221,7 +228,6 @@ class UserSettingsWidget(StackWidget):
         hlo_fontsize.addWidget(QLabel('Set font size for GUI:'))
         hlo_fontsize.addWidget(self.fontsize)
         hlo_fontsize.addWidget(QLabel('(Restart to update GUI)'))
-        hlo_fontsize.addStretch()
         vlo_gui.addLayout(hlo_fontsize)
         hlo_dark_mode = QHBoxLayout()
         self.chk_dark_mode.clicked.connect(
@@ -229,13 +235,27 @@ class UserSettingsWidget(StackWidget):
         hlo_dark_mode.addWidget(QLabel('Dark mode'))
         hlo_dark_mode.addWidget(self.chk_dark_mode)
         hlo_dark_mode.addWidget(QLabel('(restart to update)'))
-        hlo_dark_mode.addStretch()
         vlo_gui.addLayout(hlo_dark_mode)
         gb_gui.setLayout(vlo_gui)
         vlo_1.addWidget(gb_gui)
-        vlo_1.addSpacing(50)
 
-        hlo_mid.addStretch()
+        gb_annot = QGroupBox('Annotation settings for floor map')
+        gb_annot.setFont(uir.FontItalic())
+        flo_annot = QFormLayout()
+        self.annotations_linethick.setRange(5, 100)
+        self.annotations_linethick.valueChanged.connect(self.flag_edit)
+        flo_annot.addRow(QLabel('Line thickness:'), self.annotations_linethick)
+        self.annotations_fontsize.setRange(5, 100)
+        self.annotations_fontsize.valueChanged.connect(self.flag_edit)
+        flo_annot.addRow(QLabel('Font size:'), self.annotations_fontsize)
+        self.picker.setRange(0, 100)
+        self.picker.valueChanged.connect(self.flag_edit)
+        flo_annot.addRow(QLabel('Picker radius:'), self.picker)
+        self.snap_radius.setRange(0, 100)
+        self.snap_radius.valueChanged.connect(self.flag_edit)
+        flo_annot.addRow(QLabel('Snap radius:'), self.snap_radius)
+        gb_annot.setLayout(flo_annot)
+        vlo_2.addWidget(gb_annot)
 
         btn_save_user_prefs = QPushButton('Save user preferences')
         btn_save_user_prefs.setIcon(QIcon(
@@ -257,6 +277,10 @@ class UserSettingsWidget(StackWidget):
         self.config_folder.setText(self.user_prefs.config_folder)
         self.fontsize.setValue(self.user_prefs.fontsize)
         self.chk_dark_mode.setChecked(self.user_prefs.dark_mode)
+        self.annotations_linethick.setValue(self.user_prefs.annotations_linethick)
+        self.annotations_fontsize.setValue(self.user_prefs.annotations_fontsize)
+        self.picker.setValue(self.user_prefs.picker)
+        self.snap_radius.setValue(self.user_prefs.snap_radius)
         self.flag_edit(False)
 
     def save_user(self):
@@ -268,6 +292,10 @@ class UserSettingsWidget(StackWidget):
         self.user_prefs.config_folder = self.config_folder.text()
         self.user_prefs.fontsize = self.fontsize.value()
         self.user_prefs.dark_mode = self.chk_dark_mode.isChecked()
+        self.user_prefs.annotations_linethick = self.annotations_linethick.value()
+        self.user_prefs.annotations_fontsize = self.annotations_fontsize.value()
+        self.user_prefs.picker = self.picker.value()
+        self.user_prefs.snap_radius = self.snap_radius.value()
 
         status_ok, path = cff.save_user_prefs(self.user_prefs, parentwidget=self)
         if status_ok:

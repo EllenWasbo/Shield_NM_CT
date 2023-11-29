@@ -121,13 +121,17 @@ def calculate_dose(main, source_number=None, modality=None):
             'dist_maps': [],  # dist_factors not saved, easily from 1/(dist_map**2)
             'dose_factors': [],
             'doserate_max_factors': [],
-            'transmission_maps': []
+            'transmission_maps': [],
+            'transmission_floor_0': [],
+            'transmission_floor_2': [],
             }
+
         if 'NM' in sources:
             isotope_labels = [x.label for x in isotopes]
             n_NM = len(sources['NM'])
             step = 100 // n_NM
             progress_modal.setLabelText("Calculating NM dose...")
+            
             for i, source in enumerate(sources['NM']):
                 current_progress_value += step
                 progress_modal.setValue(current_progress_value)
@@ -139,8 +143,8 @@ def calculate_dose(main, source_number=None, modality=None):
                         source, isotope)
 
                     transmission_map = np.ones(occ_map.shape)
+                    errmsgs = None
                     if walls:
-                        errmsgs = None
                         for wall in walls:
                             wall_affect_map, mask = calculate_wall_affect_sector(
                                 occ_map.shape, source[2], wall[2])
@@ -157,6 +161,28 @@ def calculate_dose(main, source_number=None, modality=None):
                                 transmission_map = (
                                     transmission_map * transmission_map_this)
 
+                    thickness_corr_0 = 1
+                    thickness_corr_2 = 1
+                    if correct_thickness:
+                        dist = get_floor_distance(0, main.general_values)
+                        thickness_corr_0 = np.sqrt(dist_map ** 2 + dist ** 2) / dist
+                        dist = get_floor_distance(2, main.general_values)
+                        thickness_corr_2 = np.sqrt(dist_map ** 2 + dist ** 2) / dist
+                    transmission_floor_0, errmsg = calculate_transmission(
+                        shield_data, wall_affect_map=thickness_corr_0,
+                        thickness=main.general_values.shield_mm_below,
+                        material=main.general_values.shield_material_below,
+                        isotope=isotope)
+                    if errmsg:
+                        errmsgs.append(errmsg)
+                    transmission_floor_2, errmsg = calculate_transmission(
+                        shield_data, wall_affect_map=thickness_corr_2,
+                        thickness=main.general_values.shield_mm_above,
+                        material=main.general_values.shield_material_above,
+                        isotope=isotope)
+                    if errmsg:
+                        errmsgs.append(errmsg)
+
                     if errmsgs:
                         msgs.extend(errmsgs)
 
@@ -164,11 +190,15 @@ def calculate_dose(main, source_number=None, modality=None):
                     dose_NM['dose_factors'].append(dose_factor)
                     dose_NM['doserate_max_factors'].append(doserate_max_factor)
                     dose_NM['transmission_maps'].append(transmission_map)
+                    dose_NM['transmission_floor_0'].append(transmission_floor_0)
+                    dose_NM['transmission_floor_2'].append(transmission_floor_2)
                 else:
                     dose_NM['dist_maps'].append(None)
                     dose_NM['dose_factors'].append(None)
                     dose_NM['doserate_max_factors'].append(None)
                     dose_NM['transmission_maps'].append(None)
+                    dose_NM['transmission_floor_0'].append(None)
+                    dose_NM['transmission_floor_2'].append(None)
 
                 if progress_modal.wasCanceled():
                     break
@@ -183,10 +213,11 @@ def calculate_dose(main, source_number=None, modality=None):
             if modality == 'NM':
                 main.dose_dict[
                     'dose_NM']['dist_maps'][source_number] = dose_NM['dist_maps'][0]
+
         else:
             main.dose_dict = {
                 'dose_NM': dose_NM,
-                #'dose_CT': dose_CT,
+                #'dose_CT': dose_CT_1,
                 }
 
     return status, msgs
@@ -372,52 +403,74 @@ def calculate_wall_affect_sector(shape, source_pos, wall_pos):
     return wall_affect_sector, mask
 
 
-def calculate_transmission(shield_data, wall_affect_map, thickness=0.,
-                           material='', isotope=''):
-    """Calculate transmission factors as map.
+def calculate_transmission(shield_data, wall_affect_map=1, thickness=0.,
+                           material='', isotope='', kV_source=''):
+    """Calculate transmission factors, if floor 1 or correct thickness - as map.
 
     Parameters
     ----------
     shield_data : list of ShieldData
-    wall_affect_map : np.array
+    wall_affect_map : np.array or 1
         0 or 1 if thickness correction not performed else thickness correction
+        1 (int) if floor 0 or 2 and thickness correction is False
     thickness : float
         wall thickness in mm
     material : str
         Material name
     isotope : str, Optional
         Isotope name. Default is ''
+    kV_source : str, Optional
+        kV_source name. Default is ''
 
     Returns
     -------
-    transmission map
-    errmsg
+    transmission : float or np array
+    errmsg : str
     """
     sd = None
-    transmission_map = None
+    transmission = None
     errmsg = ''
     for data in shield_data:
-        if data.material == material and data.isotope == isotope.label:
-            sd = data
-            break
+        if isotope:
+            if data.material == material and data.isotope == isotope.label:
+                sd = data
+                break
+        elif kV_source:
+            if data.material == material and data.kV_source == kV_source.label:
+                sd = data
+                break
 
     if sd:
         if all([sd.alpha, sd.beta, sd.gamma]):
-            transmission_map = (
+            transmission = (
                 (1 + (sd.beta/sd.alpha))
                 * np.exp(sd.alpha*sd.gamma*thickness*wall_affect_map)
                 - (sd.beta/sd.alpha)) ** (-1./sd.gamma)
         elif sd.hvl1 or sd.tvl1:
             thickness_map = thickness * wall_affect_map
             if thickness < sd.hvl1:
-                transmission_map = 2 ** -(thickness_map / sd.hvl1)
+                transmission = 2 ** -(thickness_map / sd.hvl1)
             elif thickness < sd.tvl1 and sd.hvl2 > 0:
-                transmission_map = 0.5 * 2 ** -(
+                transmission = 0.5 * 2 ** -(
                     (thickness_map - sd.hvl1)/sd.hvl2)
             elif thickness > sd.tvl1:
-                transmission_map = 0.1 * 10 ** -(
+                transmission = 0.1 * 10 ** -(
                     (thickness_map - sd.tvl1)/sd.tvl2)
-            transmission_map[wall_affect_map == 0] = 1.
+            if not isinstance(wall_affect_map, int):
+                transmission[wall_affect_map == 0] = 1.
         else:
             errmsg = f'Found no shield data for {material} and {isotope}'
-    return (transmission_map, errmsg)
+    return (transmission, errmsg)
+
+
+def get_floor_distance(floor, general_values):
+    """Calculate distance from floor 1 to floor != 1."""
+    floor_dist = 0.
+    if floor == 0:
+        floor_dist = (
+            general_values.h0 + general_values.c1 - general_values.c0)
+    elif floor == 2:
+        floor_dist = (
+            general_values.h1 + general_values.c2 - general_values.c1)
+
+    return floor_dist
