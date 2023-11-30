@@ -104,15 +104,16 @@ class MainWindow(QMainWindow):
             if os.environ[ENV_CONFIG_FOLDER] == '':
                 self.save_blocked = True
 
-        if os.environ[ENV_CONFIG_FOLDER] != '':
-            cff.add_user_to_active_users()
-
-        self.update_settings()
-
         self.gui = GuiData()
         self.gui.panel_width = round(0.48*scX)
         self.gui.panel_height = round(0.86*scY)
         self.gui.char_width = char_width
+
+        if os.environ[ENV_CONFIG_FOLDER] != '':
+            cff.add_user_to_active_users()
+
+
+        self.update_settings()
 
         self.setWindowTitle('Shield NM CT v ' + VERSION)
         self.setWindowIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}logo.png'))
@@ -301,7 +302,7 @@ class MainWindow(QMainWindow):
         self.wFloorDisplay.canvas.floor_draw()
 
     def floor_changed(self):
-        """Updates when current floor changed."""
+        """Update when current floor changed."""
         floor = self.wCalculate.btns_floor.checkedId()
         if floor != self.gui.current_floor:  # changed
             self.gui.current_floor = floor
@@ -347,7 +348,7 @@ class MainWindow(QMainWindow):
             floor = self.gui.current_floor
             floor_dist = get_floor_distance(floor, self.general_values)
             wd = self.wCalculate.working_days.value()
-            if 'dose_NM' in self.dose_dict:
+            if self.dose_dict['dose_NM']:
                 dd = self.dose_dict['dose_NM']
                 self.nm_dose_map = np.zeros(self.occ_map.shape)
                 self.nm_doserate_map = np.zeros(self.occ_map.shape)
@@ -361,7 +362,7 @@ class MainWindow(QMainWindow):
                                 temp = dd['transmission_floor_0'][i] * temp
                             else:
                                 temp = dd['transmission_floor_2'][i] * temp
-                        nm_dose_map_this = wd * df * self.occ_map * temp
+                        nm_dose_map_this = 0.001 * wd * df * self.occ_map * temp
                         self.nm_dose_map = self.nm_dose_map + nm_dose_map_this
                         nm_doserate_map_this = dd['doserate_max_factors'][i] * temp
                         self.nm_doserate_map = (
@@ -369,7 +370,7 @@ class MainWindow(QMainWindow):
             else:
                 self.nm_dose_map = np.zeros(2)
                 self.nm_doserate_map = np.zeros(2)
-            if 'dose_CT' in self.dose_dict:
+            if self.dose_dict['dose_CT']:
                 dd = self.dose_dict['dose_CT']
                 self.ct_dose_map = np.zeros(self.occ_map.shape)
                 for i, df in enumerate(dd['dose_factors']):
@@ -377,7 +378,7 @@ class MainWindow(QMainWindow):
                         pass # TODO
             else:
                 self.ct_dose_map = np.zeros(2)
-            if 'dose_OT' in self.dose_dict:
+            if self.dose_dict['dose_OT']:
                 dd = self.dose_dict['dose_OT']
                 self.ot_dose_map = np.zeros(self.occ_map.shape)
                 for i, df in enumerate(dd['dose_factors']):
@@ -386,7 +387,7 @@ class MainWindow(QMainWindow):
                             temp = dd['transmission_maps'][i] / dd['dist_maps'][i]**2
                         else:
                             temp = 1. / (floor_dist**2 * dd['dist_maps'][i]**2)
-                        ot_dose_map_this = wd * df * self.occ_map * temp
+                        ot_dose_map_this = 0.001 * wd * df * self.occ_map * temp
                         self.ot_dose_map = self.ot_dose_map + ot_dose_map_this
             else:
                 self.ot_dose_map = np.zeros(2)
@@ -792,7 +793,7 @@ class FloorCanvas(FigureCanvasQTAgg):
         self.mpl_connect("motion_notify_event", self.on_motion)
         self.mpl_connect("pick_event", self.on_pick)
         self.mpl_connect('axes_enter_event', self.on_enter_axes)
-        self.mpl_connect('axes_enter_event', self.on_leave_axes)
+        self.mpl_connect('axes_leave_event', self.on_leave_axes)
 
     def on_enter_axes(self, event):
         """When mouse enter figur axes."""
@@ -839,7 +840,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                 pass
 
     def try_snap(self, event):
-        """Try to snap to hovered area or wall while editing or drawing new wall/area."""
+        """Try to snap to hovered area or wall while editing/drawing new wall/area."""
         hit = False
         gid = ''
         pos = ()
@@ -889,9 +890,8 @@ class FloorCanvas(FigureCanvasQTAgg):
                 if self.main.gui.x0 is not None:
                     self.main.gui.x1, self.main.gui.y1 = event.xdata, event.ydata
                     if self.main.gui.current_tab == 'Areas':
-                        #hit_gid_pos = self.snap_hit(event)
                         self.try_snap(event)
-                        self.update_area_on_drag()#hit_gid_pos)
+                        self.update_area_on_drag()
                     elif self.main.gui.current_tab in ['Scale', 'Walls']:
                         if self.main.gui.current_tab == 'Walls':
                             self.try_snap(event)
@@ -1291,7 +1291,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                 elif p.get_gid() == 'point_release':
                     pass
                 else:
-                    p.set_markeredgewidth(0)
+                    p.set_markeredgewidth(1)
             except AttributeError:
                 pass
         self.draw_idle()
@@ -1352,8 +1352,6 @@ class FloorCanvas(FigureCanvasQTAgg):
         if hover:
             size = 1.1*size
         marker.set_markersize(size)
-        marker.set_markerfacecolor('gray')
-        marker.set_markeredgecolor('k')
         if highlight:
             marker.set_alpha(0.8)
         else:
@@ -1449,7 +1447,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                 patch.set_linewidth(linethick)
         self.draw_idle()
 
-    def update_area_on_drag(self):#, hit_gid_pos):
+    def update_area_on_drag(self):
         """Update GUI when area dragged either by handles or not.
 
         Parameters
@@ -1460,35 +1458,6 @@ class FloorCanvas(FigureCanvasQTAgg):
         width = round(self.main.gui.x1 - self.main.gui.x0)
         height = round(self.main.gui.y1 - self.main.gui.y0)
 
-        # snap?
-        '''
-        if hit_gid_pos[0]:
-            snap = False
-            hit, gid, pos = hit_gid_pos
-            [xs0, ys0], [xs1, ys1] = pos
-
-            diff_xs0 = abs(self.main.gui.x1 - xs0)
-            diff_xs1 = abs(self.main.gui.x1 - xs1)
-            if diff_xs0 < self.main.gui.picker:
-                self.main.gui.x1 = xs0
-                snap = True
-            elif diff_xs1 < self.main.gui.picker:
-                self.main.gui.x1 = xs1
-                snap = True
-
-            diff_ys0 = abs(self.main.gui.y1 - ys0)
-            diff_ys1 = abs(self.main.gui.y1 - ys1)
-            if diff_ys0 < self.main.gui.picker:
-                self.main.gui.y1 = ys0
-                snap = True
-            elif diff_ys1 < self.main.gui.picker:
-                self.main.gui.y1 = ys1
-                snap = True
-
-            if snap:
-                width = round(self.main.gui.x1 - self.main.gui.x0)
-                height = round(self.main.gui.y1 - self.main.gui.y0)
-        '''
         if self.drag_handle:
             gid_handle = self.current_artist.get_gid()
             half = self.main.gui.handle_size // 2
@@ -1641,7 +1610,6 @@ class FloorWidget(QWidget):
 
         self.main = main
         self.canvas = FloorCanvas(self.main)
-        #self.colorbar_canvas = ColorBarCanvas(self.main, self.canvas)
         tbimg = NavToolBar(self.canvas, self)
         self.tbimgPos = PositionToolBar(self.canvas, self.main)
         tbimg.addWidget(self.tbimgPos)
@@ -1706,7 +1674,7 @@ class NavToolBar(NavigationToolbar2QT):
         super().__init__(canvas, parent)
         self.main = parent.main
         for x in self.actions():
-            if x.text() in ['Back', 'Forward', 'Subplots']:#, 'Customize']:
+            if x.text() in ['Back', 'Forward', 'Subplots']:
                 self.removeAction(x)
 
     def set_message(self, event):
@@ -2168,12 +2136,14 @@ class CalculateWidget(QWidget):
         hlo_calc.addWidget(btn_calculate)
 
     def correct_thickness_edited(self):
+        """Update after setting for correct thickness edited."""
         self.main.general_values.correct_thickness = (
             self.chk_correct_thickness_geometry.isChecked())
         if self.main.dose_dict:
             self.main.reset_dose()  # TODO or recalculate?
 
     def working_days_edited(self):
+        """Update after mumber of working days edited."""
         self.main.general_values.working_days = self.working_days.value()
         if self.main.dose_dict:
             self.main.sum_dose_days()

@@ -1,4 +1,4 @@
-working_days: 1
+working_days: 1000
 convert_to_mSv: true
 correct_thickness: false
 c0: 1.0

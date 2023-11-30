@@ -34,6 +34,17 @@ ANNOTATION_OPTIONS = ['Scale', 'Areas', 'Walls', 'Wall thickness',
                    'Calculation points']
 # same as Tab label where this should be used to test whether to force display
 
+MARKER_STYLE = {
+    'NM': dict(marker='o', color='yellow', markerfacecolor='yellow',
+               markeredgecolor='k'),
+    'CT': dict(color='gray', markerfacecolor='gray',
+               markeredgecolor='k'),
+    'OT': dict(marker='D', color='yellow', markerfacecolor='yellow',
+               markeredgecolor='k'),
+    'point': dict(marker='o', color='blue', markerfacecolor='blue',
+                  markeredgecolor='blue'),
+    }
+
 CONFIG_FNAMES = {
     'general_values': {
         'saved_as': 'object',

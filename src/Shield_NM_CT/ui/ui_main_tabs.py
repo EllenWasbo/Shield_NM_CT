@@ -18,7 +18,8 @@ from PyQt5.QtWidgets import (
 from matplotlib.patches import Rectangle
 
 # Shield_NM_CT block start
-from Shield_NM_CT.config.Shield_NM_CT_constants import ENV_ICON_PATH
+from Shield_NM_CT.config.Shield_NM_CT_constants import (
+    ENV_ICON_PATH, MARKER_STYLE)
 from Shield_NM_CT.ui import messageboxes
 import Shield_NM_CT.ui.reusable_widgets as uir
 from Shield_NM_CT.scripts import mini_methods
@@ -92,7 +93,6 @@ class InputTab(QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.setMinimumHeight(500)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
-        #self.table.currentCellChanged.connect(self.cell_selection_changed)
 
         self.table_list = []
         # table as list for easy access for computations, import/export
@@ -129,10 +129,11 @@ class InputTab(QWidget):
                 self.update_wall_annotation(row, remove_already=True)
                 self.highlight_selected_in_image()
                 if self.main.dose_dict:
-                    self.main.reset_dose()  #TODO or calculate dose?
+                    self.main.reset_dose()  # TODO or calculate dose?
             elif 'source' in self.label:
                 self.update_current_source_annotation()
                 if self.main.dose_dict:
+                    print(f'calculate row {row}')
                     self.main.calculate_dose(source_number=row, modality=self.modality)
             elif self.label == 'point':
                 self.update_current_source_annotation()
@@ -174,11 +175,10 @@ class InputTab(QWidget):
         if line_index is None:  # add
             if x is not None:
                 canvas.ax.plot(
-                    x, y, 'bo',
-                    markersize=self.main.gui.annotations_markersize[0],
-                    markeredgecolor='red', markeredgewidth=0,
-                    picker=self.main.gui.picker,
-                    gid=f'{self.modality}_{line_index}')
+                    x, y, markersize=self.main.gui.annotations_markersize[0],
+                    markeredgewidth=1, picker=self.main.gui.picker,
+                    gid=f'{self.modality}_{line_index}',
+                    **MARKER_STYLE[self.modality])
                 if self.modality == 'CT':
                     canvas.ax.lines[-1].set_marker(
                         canvas.CT_marker(self.table_list[i][5])[0])
@@ -194,7 +194,7 @@ class InputTab(QWidget):
             else:
                 canvas.ax.lines[line_index].remove()
             canvas.draw_idle()
-            
+
     def remove_source_annotations(self, all_sources=True, modalities=[]):
         """Remove annotations for sources.
 
@@ -220,7 +220,6 @@ class InputTab(QWidget):
                 if len(gid_split) == 2:
                     if gid_split[0] in modalities:
                         try:
-                            row = int(gid_split[1])
                             index_lines.append(i)
                         except ValueError:
                             pass
@@ -263,9 +262,9 @@ class InputTab(QWidget):
                         x, y = mini_methods.get_pos_from_text(tabitem.text())
                         if x is not None:
                             canvas.ax.plot(
-                                x, y, 'bo',
+                                x, y, **MARKER_STYLE[w.modality],
                                 markersize=w.main.gui.annotations_markersize[0],
-                                markeredgecolor='red', markeredgewidth=0,
+                                markeredgewidth=1,
                                 picker=w.main.gui.picker,
                                 gid=f'{w.modality}_{i}')
                             if w.modality == 'CT':
@@ -881,10 +880,9 @@ class WallsTab(InputTab):
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(
             ['Active', 'Wall name', 'x0,y0,x1,y1', 'Material', 'Thickness (mm)'])
-        mat = self.main.materials[0].label
-        self.empty_row = [True, '', '',
-                          self.main.materials[0].label,
-                          self.main.materials[0].default_thickness]
+        material = self.main.materials[0]
+        self.empty_row = [True, '', '', material.label,
+                          material.default_thickness]
         self.material_strings = [x.label for x in self.main.materials]
         self.table_list = [copy.deepcopy(self.empty_row)]
         self.active_row = 0
@@ -954,7 +952,7 @@ class WallsTab(InputTab):
                 self.table_list[self.active_row][2] = text
                 self.update_wall_annotations()
                 self.main.reset_dose()
-            except:
+            except (AttributeError, IndexError):
                 self.select_row_col(0, 0)
 
     def get_color_from_material(self, material):
@@ -1138,7 +1136,7 @@ class WallsTab(InputTab):
         removed_row = super().delete_row()
         if removed_row > -1:
             if self.main.dose_dict:
-                self.main.reset_dose()  #TODO or update
+                self.main.reset_dose()  # TODO or update
 
     def add_row(self):
         """Add row after selected row (or as last row if none selected).
@@ -1249,18 +1247,6 @@ class NMsourcesTab(InputTab):
         for row in range(self.table.rowCount()):
             self.table.setCellWidget(row, 3, uir.CellCombo(
                 self, self.isotope_strings, row=row, col=3))
-
-    def update_NM_dose(self, update_row=None):
-        """Update array containing NM dose and redraw."""
-        # if update_row specific only update this else calculate all (when import)
-        # apply wall shielding for each source
-        # now sum
-        for i in range(self.table.rowCount()):
-            if self.table_list[i][0]:  # if active
-                tabitem = self.table.cellWidget(i, 2)
-                x, y = mini_methods.get_pos_from_text(tabitem.text())
-                # TODO ....
-        self.main.wFloorDisplay.canvas.floor_draw()
 
     def delete_row(self):
         """Delete selected row."""
@@ -1413,18 +1399,6 @@ class CTsourcesTab(InputTab):
                 details=warnings)
             dlg.exec()
 
-    def update_CT_dose(self, update_row=None):
-        """Update array containing CT dose and redraw."""
-        # if update_row specific only update this else calculate all (when import)
-        # apply wall shielding for each source
-        # now sum
-        for i in range(self.table.rowCount()):
-            if self.table_list[i][0]:  # if active
-                tabitem = self.table.cellWidget(i, 2)
-                x, y = mini_methods.get_pos_from_text(tabitem.text())
-                # TODO ....
-        self.main.wFloorDisplay.canvas.floor_draw()
-
     def delete_row(self):
         """Delete selected row."""
         removed_row = super().delete_row()
@@ -1489,9 +1463,7 @@ class OTsourcesTab(InputTab):
                 'Specify parameters for the sources:<br>'
                 '   - kV source = Select named kV-source as defined in Settings - '
                 'Shield Data<br>'
-                '   - kVp correction = Shield data specified for max kVp, you may '
-                'correct by a effective factor if kVp generally lower<br>'
-                '   - mAs pr patient = total mAs on average pr procedure<br>'
+                '   - ' + '\u03bc' + 'Sv @ 1m pr procedure (on average)<br>'
                 '   - # pr workday = average number of procedures pr working day. '
                 'Dose multiplied with number of working days specified above.'
                 ),
@@ -1500,12 +1472,12 @@ class OTsourcesTab(InputTab):
         self.modality = 'OT'
         self.label = f'{self.modality} sources'
         self.main = main
-        self.table.setColumnCount(7)
+        self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(
             ['Active', 'Source name', 'x,y', 'kV source',
-             'kVp correction', 'mAs pr patient', '# pr workday'])
+             '\u03bc'+'Sv @ 1m pr procedure', '# procedures pr workday'])
         self.empty_row = [True, '', '', self.main.general_values.kV_sources[0],
-                          1.0, 4000, 0.0]
+                          5.0, 0.0]
         self.kV_source_strings = self.main.general_values.kV_sources
         self.table_list = [copy.deepcopy(self.empty_row)]
         self.active_row = 0
@@ -1513,9 +1485,8 @@ class OTsourcesTab(InputTab):
         self.table.setColumnWidth(1, 20*self.main.gui.char_width)
         self.table.setColumnWidth(2, 13*self.main.gui.char_width)
         self.table.setColumnWidth(3, 20*self.main.gui.char_width)
-        self.table.setColumnWidth(4, 19*self.main.gui.char_width)
-        self.table.setColumnWidth(5, 19*self.main.gui.char_width)
-        self.table.setColumnWidth(6, 19*self.main.gui.char_width)
+        self.table.setColumnWidth(4, 25*self.main.gui.char_width)
+        self.table.setColumnWidth(5, 25*self.main.gui.char_width)
 
         self.table.verticalHeader().setVisible(False)
         self.add_cell_widgets(0)
@@ -1529,13 +1500,11 @@ class OTsourcesTab(InputTab):
         self.table.setCellWidget(row, 3, uir.CellCombo(
             self, self.kV_source_strings, row=row, col=3))  # kV source
         self.table.setCellWidget(row, 4, uir.CellSpinBox(
-            self, initial_value=1.,
-            row=row, col=4, max_val=1.0, step=0.1, decimals=2))  # kVp corr
+            self, initial_value=5.,
+            row=row, col=4, max_val=1000, step=1, decimals=1))  # uSv @1m pr procedure
         self.table.setCellWidget(row, 5, uir.CellSpinBox(
-            self, initial_value=4000, row=row, col=5,
-            max_val=10000, step=100, decimals=0))  # mAs pr pat
-        self.table.setCellWidget(row, 6, uir.CellSpinBox(
-            self, initial_value=30, row=row, col=6, decimals=0))  # pr workday
+            self, initial_value=0, row=row, col=5,
+            max_val=100, step=1, decimals=0))  # pr workday
 
     def update_kV_sources(self):
         """Update ComboBox of all rows when list of kV_sources changed from settings."""
@@ -1563,18 +1532,6 @@ class OTsourcesTab(InputTab):
                 icon=QMessageBox.Warning,
                 details=warnings)
             dlg.exec()
-
-    def update_CT_dose(self, update_row=None):
-        """Update array containing CT dose and redraw."""
-        # if update_row specific only update this else calculate all (when import)
-        # apply wall shielding for each source
-        # now sum
-        for i in range(self.table.rowCount()):
-            if self.table_list[i][0]:  # if active
-                tabitem = self.table.cellWidget(i, 2)
-                x, y = mini_methods.get_pos_from_text(tabitem.text())
-                # TODO ....
-        self.main.wFloorDisplay.canvas.floor_draw()
 
     def delete_row(self):
         """Delete selected row."""
@@ -1610,7 +1567,6 @@ class OTsourcesTab(InputTab):
             self.table.cellWidget(added_row, 3).setCurrentText(values_above[3])
             self.table.cellWidget(added_row, 4).setValue(float(values_above[4]))
             self.table.cellWidget(added_row, 5).setValue(int(values_above[5]))
-            self.table.cellWidget(added_row, 6).setValue(int(values_above[6]))
 
             for i in range(self.table.columnCount()):
                 self.table.cellWidget(added_row, i).blockSignals(False)
@@ -1681,4 +1637,5 @@ class PointsTab(InputTab):
         return added_row
 
     def duplicate_row(self):
-        pass  # to make TableToolBar happy
+        """Override to make TableToolBar happy."""
+        pass
