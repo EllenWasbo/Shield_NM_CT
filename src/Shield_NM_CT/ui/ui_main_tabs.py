@@ -530,13 +530,14 @@ class ScaleTab(InputTab):
         self.table.setColumnWidth(0, 40*self.main.gui.char_width)
         self.table.setColumnWidth(1, 25*self.main.gui.char_width)
         self.add_cell_widgets(0)
-        self.table.setMinimumHeight(100)
+        self.table.setMinimumHeight(80)
 
         self.vlo.addWidget(uir.LabelHeader('Floor heights', 4))
         hlo_heights = QHBoxLayout()
         self.vlo.addLayout(hlo_heights)
         img_lbl = QLabel()
         im = QPixmap(':/icons/heights.png')
+        im = im.scaledToWidth(round(self.main.gui.panel_width*0.4))
         img_lbl.setPixmap(im)
         hlo_heights.addWidget(img_lbl)
         vlo_heights = QVBoxLayout()
@@ -760,12 +761,9 @@ class AreasTab(InputTab):
 
     def get_pos(self):
         """Get positions for element as defined in figure."""
-        text = (
-            f'{self.main.gui.x0:.0f}, '
-            f'{self.main.gui.y0:.0f}, '
-            f'{self.main.gui.x1:.0f}, '
-            f'{self.main.gui.y1:.0f}'
-            )
+        xs = [round(self.main.gui.x0), round(self.main.gui.x1)]
+        ys = [round(self.main.gui.y0), round(self.main.gui.y1)]
+        text = f'{min(xs)}, {min(ys)}, {max(xs)}, {max(ys)}'
         if self.active_row > -1:
             tabitem = self.table.cellWidget(self.active_row, 2)
             tabitem.setText(text)

@@ -51,8 +51,8 @@ class SettingsDialog(ShieldDialog):
         self.main = main
 
         self.setWindowTitle('Settings manager')
-        self.width1 = 0.5 * self.main.gui.panel_width
-        self.width2 = self.main.gui.panel_width
+        self.width1 = 0.3 * self.main.gui.panel_width
+        self.width2 = 1.2 * self.main.gui.panel_width
 
         hlo = QHBoxLayout()
         self.setLayout(hlo)
@@ -90,6 +90,9 @@ class SettingsDialog(ShieldDialog):
         add_widget(parent=self.item_shared_settings, snake='isotopes',
                    title='Isotopes',
                    widget=settings_stacks.IsotopeWidget(self.main))
+        add_widget(parent=self.item_shared_settings, snake='ct_doserates',
+                   title='CT doserate maps',
+                   widget=settings_stacks.CT_doserateWidget(self.main))
         add_widget(parent=self.item_shared_settings, snake='materials',
                    title='Materials',
                    widget=settings_stacks.MaterialWidget(self.main))

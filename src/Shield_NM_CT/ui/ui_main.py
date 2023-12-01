@@ -46,6 +46,7 @@ import Shield_NM_CT.ui.reusable_widgets as uir
 from Shield_NM_CT.ui.ui_dialogs import AboutDialog, EditAnnotationsDialog
 from Shield_NM_CT.scripts.calculate_dose import (calculate_dose, get_floor_distance)
 from Shield_NM_CT.scripts import mini_methods
+from Shield_NM_CT.scripts.read_idl_dat import ReadDat
 import Shield_NM_CT.resources
 # Shield_NM_CT block end
 
@@ -75,8 +76,8 @@ class GuiData():
     handle_size = 15
     picker = 10  # picker margin for point and line
     snap_radius = 20  # margin for snapping
-    alpha_image = 1.0
-    alpha_overlay = 0.5
+    alpha_image = 0.5
+    alpha_overlay = 0.3
     panel_width = 400
     panel_height = 700
     char_width = 7
@@ -504,7 +505,6 @@ class MainWindow(QMainWindow):
                     self.wVisual.btns_annotate.button(
                         ANNOTATION_OPTIONS.index(self.gui.current_tab)).setChecked(True)
                 if self.gui.current_tab == 'Areas':
-                    self.wVisual.set_alpha_overlay(0.2)
                     self.wVisual.btns_overlay.button(1).setChecked(True)
                     self.areas_tab.update_occ_map()
                 elif self.gui.current_tab == 'Walls':
@@ -587,7 +587,8 @@ class MainWindow(QMainWindow):
                 self.areas_tab.import_csv(
                     path=files[idx].resolve().as_posix(),
                     ncols_expected=len(self.areas_tab.empty_row)+1)
-                self.areas_tab.update_occ_map()
+                self.areas_tab.update_occ_map(
+                    update_overlay=self.gui.current_tab=='Areas')
             if 'walls' in file_bases:
                 idx = file_bases.index('walls')
                 self.walls_tab.import_csv(
@@ -665,10 +666,23 @@ class MainWindow(QMainWindow):
                     path=os.path.join(path, 'points.csv'))
                 ok, _ = cff.save_settings(
                     self.general_values, fname='general_values',
-                    temp_config_folder=os.path.join(path, 'general_values.yaml'))
+                    temp_config_folder=path)
             else:
                 QMessageBox.warning(
                     self, 'Failed saving', f'No writing permission for {path}')
+
+    def open_project_IDL(self):
+        """Load .dat file from IDL version of program."""
+        dlg = QFileDialog(self,
+                          directory=r'C:\Users\ellen\Documents\GitHub\Shield_NM_CT\tests\testdat',
+                          filter='*.dat')
+        if dlg.exec():
+            fname = dlg.selectedFiles()
+            path = Path(os.path.normpath(fname[0]))
+            if path:
+                obj = ReadDat(self, path)
+                if obj.folder:
+                    self.open_project(path=Path(obj.folder))
 
     def run_settings(self, initial_view='', initial_template_label=''):
         """Display settings dialog."""
@@ -707,6 +721,9 @@ class MainWindow(QMainWindow):
         act_save_project_as.triggered.connect(
             lambda: self.save_project(save_as=True))
 
+        act_load_projectIDL = QAction('Load .dat file from IDL version...', self)
+        act_load_projectIDL.triggered.connect(self.open_project_IDL)
+
         act_settings = QAction('Settings', self)
         act_settings.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}gears.png'))
         act_settings.setToolTip('Open the user settings manager')
@@ -732,7 +749,7 @@ class MainWindow(QMainWindow):
         # fill menus
         mFile = QMenu('&File', self)
         mFile.addActions([act_load_floor_img, act_load_project, act_save_project,
-                          act_save_project_as, act_quit])
+                          act_save_project_as, act_load_projectIDL, act_quit])
         menu_bar.addMenu(mFile)
         mSett = QMenu('&Settings', self)
         mSett.addAction(act_settings)
@@ -1589,11 +1606,12 @@ class FloorCanvas(FigureCanvasQTAgg):
         """Draw or redraw all elements."""
         self.ax.cla()
 
-        props = dict(boxstyle='round', facecolor='wheat', alpha=0.6, pad=1)
+        props = dict(boxstyle='round', facecolor='wheat', alpha=0.8, pad=1)
         self.info_text = self.ax.text(
             0, 0, '', fontsize=self.main.gui.annotations_fontsize, bbox=props)
         self.info_text.set_visible(False)
-        self.image = self.ax.imshow(self.main.image, cmap='gray')
+        self.image = self.ax.imshow(self.main.image, cmap='gray',
+                                    alpha=self.main.gui.alpha_image)
         self.ax.axis('off')
 
         self.image_overlay = self.ax.imshow(
@@ -1934,13 +1952,13 @@ class VisualizationWidget(QWidget):
         self.alpha_overlay_value = QLabel(
             f'{100*self.main.gui.alpha_overlay:.0f} %')
         self.alpha_overlay.setRange(0, 100)
-        self.alpha_overlay.setValue(50)
+        self.alpha_overlay.setValue(100*self.main.gui.alpha_overlay)
         self.alpha_overlay.valueChanged.connect(self.update_alpha_overlay)
         self.alpha_image = QSlider(Qt.Horizontal)
         self.alpha_image_value = QLabel(
             f'{100*self.main.gui.alpha_image:.0f} %')
         self.alpha_image.setRange(0, 100)
-        self.alpha_image.setValue(100)
+        self.alpha_image.setValue(100*self.main.gui.alpha_image)
         self.alpha_image.valueChanged.connect(self.update_alpha_image)
         vlo_alpha.addWidget(self.colorbar)
         vlo_alpha.addWidget(uir.LabelItalic('Opacity image'))
@@ -2025,7 +2043,7 @@ class VisualizationWidget(QWidget):
             norm = mpl.colors.Normalize(vmin=0, vmax=1)
             self.main.wFloorDisplay.canvas.image_overlay.set(
                 alpha=0.2, cmap='rainbow', norm=norm, clim=(0., 1.))
-            self.set_alpha_overlay(0.2)
+            self.set_alpha_overlay(self.main.gui.alpha_overlay)
             self.main.wFloorDisplay.canvas.image_overlay.set_data(self.main.occ_map)
         else:
             self.main.wFloorDisplay.canvas.update_dose_overlay()

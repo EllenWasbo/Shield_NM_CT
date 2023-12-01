@@ -11,7 +11,7 @@ from pathlib import Path
 
 directory = Path(__file__).parent.parent / 'src'
 
-search_string = "draw_idle"
+search_string = "temp_config_folder"
 
 for root, dirs, files in os.walk(directory):
     for file in files:

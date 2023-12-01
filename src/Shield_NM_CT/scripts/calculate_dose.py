@@ -99,7 +99,7 @@ def calculate_dose(main, source_number=None, modality=None):
 
     if proceed:
         max_progress = 100 * n_sources  # 0-100 within each source
-        step = 100 if len(walls) > 0 else 100 // len(walls)
+        step = 100 if len(walls) == 0 else 100 // len(walls)
         progress_modal = uir.ProgressModal(
             "Calculating...", "Cancel", 0, max_progress, main, minimum_duration=0)
 

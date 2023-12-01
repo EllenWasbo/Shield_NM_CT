@@ -1,0 +1,15 @@
+;Active;Source name;x,y;Isotope;In patient;A0 (MBq);t1 (hours);Duration (hours);Rest void;# pr workday
+0;True;PETCT;254, 9;F-18;True;250,0;1,0;0,3;0,9;12,0
+1;True;PETinjA1;155, 217;F-18;True;250,0;0,0;1,0;1,0;3,0
+2;True;PETinjA2;153, 255;F-18;True;250,0;0,0;1,0;1,0;3,0
+3;True;PETinjA3;154, 532;F-18;True;250,0;0,0;1,0;1,0;3,0
+4;True;PETinjA4;155, 610;F-18;True;250,0;0,0;1,0;1,0;3,0
+5;True;PETinjA5;155, 649;F-18;True;250,0;0,0;1,0;1,0;3,0
+6;True;PETinjB1;325, 180;F-18;True;250,0;0,0;1,0;1,0;3,0
+7;True;PETinjB2;321, 296;F-18;True;250,0;0,0;1,0;1,0;3,0
+8;True;PETinjB3;322, 375;F-18;True;250,0;0,0;1,0;1,0;3,0
+9;True;PETinjB4;322, 453;F-18;True;250,0;0,0;1,0;1,0;3,0
+10;True;PETinjB5;320, 570;F-18;True;250,0;0,0;1,0;1,0;3,0
+11;True;PETMR;248, 839;F-18;True;250,0;1,0;0,3;0,9;12,0
+12;True;PETWC;350, 607;F-18;True;250,0;0,75;0,05;1,0;4,0
+13;True;PETWCHC;303, 610;F-18;True;250,0;0,75;0,05;1,0;20,0

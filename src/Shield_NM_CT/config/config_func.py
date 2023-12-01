@@ -527,7 +527,7 @@ def save_settings(settings, fname='', temp_config_folder=''):
     if fname != '':
         proceed = False
         if temp_config_folder:
-            path = temp_config_folder
+            path = Path(temp_config_folder) / f'{fname}.yaml'
         else:
             path = get_config_filename(fname, force=True)
         if os.access(Path(path).parent, os.W_OK):

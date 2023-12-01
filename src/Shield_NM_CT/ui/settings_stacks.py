@@ -6,6 +6,7 @@
 """
 import os
 import copy
+import numpy as np
 from time import time
 
 from PyQt5.QtCore import Qt, QItemSelectionModel
@@ -14,7 +15,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QToolBar,
     QLabel, QPushButton, QButtonGroup, QRadioButton, QAction, QCheckBox,
     QComboBox, QDoubleSpinBox, QInputDialog, QColorDialog, QTableWidget,
-    QMessageBox
+    QHeaderView, QTableWidgetItem, QMessageBox
     )
 
 # Shield_NM_CT block start
@@ -116,7 +117,88 @@ class IsotopeWidget(StackWidget):
 
     def delete(self):
         """After verifying at will."""
-        # not possible if used in shield data
+        #TODO, not possible if used in shield data
+
+
+class DoserateMapWidget(QTableWidget):
+    """Table for CT doseratemap."""
+    
+    def __init__(self, parent, cols=0, rows=0, col_labels=[], row_labels=[],
+                 table_number=0):
+        super().__init__()
+        self.parent = parent
+        self.setColumnCount(cols)
+        self.setRowCount(rows)
+        self.setHorizontalHeaderLabels(col_labels)
+        self.table_number = table_number
+        self.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.setVerticalHeaderLabels(row_labels)
+        self.verticalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.cellChanged.connect(lambda: self.parent.flag_edit(True))
+
+    def update_data(self):
+        """Update data with table from parent.current_template."""
+        #TODO self.parent.current_template.tables[0] # cor
+        self.blockSignals(True)
+        this_table = self.parent.current_template.tables[self.table_number]
+        for row in range(self.rowCount()):
+            for col in range(self.columnCount()):
+                twi = QTableWidgetItem(f'{this_table[row][col]:.4f}')
+                self.setItem(row, col, twi)
+        self.resizeRowsToContents()
+        self.blockSignals(False)
+
+
+class CT_doserateWidget(StackWidget):
+    """CT doserate settings."""
+
+    def __init__(self, main):
+        header = 'CT doserate maps'
+        subtxt = ''
+        super().__init__(main, header, subtxt,
+                         temp_list=True, temp_alias='CT doserate map')
+        self.fname = 'ct_doserates'
+        self.empty_template = cfc.CT_doserates()
+
+        self.table_sag = DoserateMapWidget(
+            self, cols=12, rows=6,
+            col_labels=[f'{val:.1f}' for val in np.linspace(-2, 3.5, num=12)],
+            row_labels=[f'{val:.1f}' for val in np.linspace(1.5, -1, num=6)],
+            table_number=1)
+        self.table_cor = DoserateMapWidget(
+            self, cols=7, rows=12,
+            col_labels=[f'{val:.1f}' for val in np.linspace(-1.5, 1.5, num=7)],
+            row_labels=[f'{val:.1f}' for val in np.linspace(-2, 3.5, num=12)],
+            table_number=0)
+
+        self.wid_temp = QWidget(self)
+
+        self.hlo.addWidget(self.wid_temp)
+        self.vlo_temp = QVBoxLayout()
+        self.wid_temp.setLayout(self.vlo_temp)
+
+        self.vlo_temp.addWidget(self.table_sag)
+        self.vlo_temp.addWidget(self.table_cor)
+        self.vlo_temp.addStretch()
+
+        self.vlo.addWidget(uir.HLine())
+        self.vlo.addWidget(self.status_label)
+
+    def update_data(self):
+        """Refresh GUI after selecting template."""
+        self.table_cor.update_data()
+        self.table_sag.update_data()
+        self.flag_edit(False)
+
+    def get_current_template(self):
+        """Get self.current_template where not dynamically set."""
+        #TODO read current tables, set current_template.tables
+        pass
+
+    def delete(self):
+        """Delete selected template."""
+        #TODO sure? delete
+        pass
 
 
 class MaterialWidget(StackWidget):
@@ -188,7 +270,8 @@ class MaterialWidget(StackWidget):
 
     def delete(self):
         """After verifying at will."""
-        # not possible if used in shield data
+        #TODO not possible if used in shield data
+        pass
 
 
 class ShieldDataWidget(StackWidget):
