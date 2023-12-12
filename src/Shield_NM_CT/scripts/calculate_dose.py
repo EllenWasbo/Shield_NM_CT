@@ -7,6 +7,7 @@ Collection of small functions used in ImageQC.
 """
 import copy
 import numpy as np
+from skimage.transform import resize
 
 # Shield_NM_CT block start
 from Shield_NM_CT.ui import reusable_widgets as uir
@@ -225,6 +226,165 @@ def get_distance_source(shape, xy, calibration_factor):
     distance_factors = 1. / (distance_map ** 2)
 
     return (distance_map, distance_factors)
+
+
+def generate_CT_doseratemap_cor(template,
+                                meters_lateral=1.5, meters_rear=2., meters_front=3.5,
+                                resolution=0.1):
+    """Generate array with doserates based on values from config_classes.CT_doserates.
+
+    Parameters
+    ----------
+    template : config_classes.CT_doserates
+        doserate values at defined positions
+    meters_lateral : float, optional
+        extract values to the given number of meters laterally. The default is 1.5.
+    meters_rear : float, optional
+        extract values to the given number of meters rear of CT iso. The default is 2..
+    meters_front : TYPE, optional
+        extract values to the given number of meters front of CT iso. The default is 2..
+    resolution : float, optional
+        resolution of returnd array in meters/pixel. The default is 0.1.
+
+    Returns
+    -------
+    doseratemap : np.array
+    offset xy: tuple center position of output
+    """
+    # start with 50cm resolution (same as values from doserate table)
+    nx50 = round(np.ceil(meters_lateral / 0.5)) + 1
+    # left side calculated and duplicated
+    ny50 = round(np.ceil((meters_rear + meters_front) / 0.5)) + 1
+    doseratemap = np.zeros((ny50, nx50))
+
+    cy = np.ceil((meters_rear) / 0.5)  # center x and y
+    xs, ys = np.meshgrid(np.arange(nx50), np.arange(ny50) - cy)
+    ys = -ys
+    dists_sq = 0.5 ** 2 * (xs ** 2 + ys ** 2)
+    dists_sq[dists_sq < 0.5**2] = 0.5**2
+    sin_angles = 0.5*ys / np.sqrt(dists_sq)
+
+    tables_len = 0
+    try:
+        tables_len = len(template.tables)
+    except TypeError:
+        tables_len = 0
+    if tables_len:
+        # edge values distances and angles
+        x_edge = 0.5 * np.array([0, 1, 2] + [3]*12 + [2, 1, 0])
+        y_edge = 0.5 * np.array([4]*3 + list(range(4, -8, -1)) + [-7]*3)
+        dists_edge_sq = x_edge ** 2 + y_edge ** 2
+        sin_angles_edge = y_edge / np.sqrt(dists_edge_sq)
+
+        for i in range(nx50):  # left side
+            for j in range(ny50):
+                diff_angle = sin_angles_edge - sin_angles[j, i]
+                idx = np.where(np.abs(diff_angle) == np.min(np.abs(diff_angle)))
+                dose_factor = dists_edge_sq[idx[0][0]] / dists_sq[j, i]
+                doseratemap[j, i] = dose_factor * template.tables[0][idx[0][0]]
+    else:
+        sin_rear = np.sin(template.rear_stop_angle * np.pi() / 180.)
+        sin_front = np.sin(template.front_stop_angle * np.pi() / 180.)
+        doseratemap = template.scatter_factor_gantry / dists_sq
+        doseratemap[sin_angles < sin_front] = template.scatter_factor_front / dists_sq
+        doseratemap[sin_angles > sin_rear] = template.scatter_factor_rear / dists_sq
+
+    if resolution != 0.5:
+        nx = np.ceil(meters_lateral / resolution)
+        ny = np.ceil((meters_rear + meters_front) / resolution)
+        # assure odd number pixels (central is central)
+        if nx % 2 == 0:
+            nx += 1
+        if ny % 2 == 0:
+            ny += 1
+        doseratemap = resize(doseratemap, (ny, nx))
+    else:
+        nx = nx50
+
+    # duplicate and flip in x-dir
+    right_side = np.fliplr(doseratemap[:, 1:])
+    doseratemapfull = np.concatenate((right_side, doseratemap), axis=1)
+
+    x_offset = round(nx // 2)
+    y_offset = round(np.ceil((meters_rear) / resolution))
+
+    return (doseratemapfull, (x_offset, y_offset))
+
+
+def generate_CT_doseratemap_sag(template,
+                                meters_rear=2., meters_front=3.5,
+                                meters_z=1.5, above=True,
+                                resolution=0.1):
+    """Generate array with doserates based on values from config_classes.CT_doserates.
+
+    Parameters
+    ----------
+    values : array like
+        doserate values at defined positions
+    meters_rear : float, optional
+        extract values to the given number of meters rear of CT iso. The default is 2..
+    meters_front : float, optional
+        extract values to the given number of meters front of CT iso. The default is 2..
+    meters_z: float, optional
+        extract values to the given number of meters front of CT iso. The default is 1.5
+        above tells if z is above or below
+    above: bool, optional
+        Calculate doses above or below iso (floor above or below). The default True.
+    resolution : float, optional
+        resolution of returnd array in meters/pixel. The default is 0.1.
+
+    Returns
+    -------
+    doseratemap : np.array
+    offset zy: tuple center position of output
+    """
+    # start with 50cm resolution (same as values from doserate table)
+    nz50 = round(np.ceil(meters_z / 0.5)) + 1
+    ny50 = round(np.ceil((meters_rear + meters_front) / 0.5)) + 1
+    doseratemap = np.zeros((ny50, nz50))
+
+    cy = np.ceil(meters_rear / 0.5)  # center y
+    zs, ys = np.meshgrid(np.arange(nz50), np.arange(ny50) - cy)
+    ys = -ys
+    dists_sq = 0.5 ** 2 * (zs ** 2 + ys ** 2)
+    dists_sq[dists_sq < 0.5**2] = 0.5**2
+    sin_angles = 0.5*ys / np.sqrt(dists_sq)
+
+    # edge values distances and angles
+    if above:
+        edge_values = edge_values[:18]
+        z_edge = 0.5 * np.array([0, 1, 2] + [3]*12 + [2, 1, 0])
+        y_edge = 0.5 * np.array([4]*3 + list(range(4, -8, -1)) + [-7]*3)
+    else:
+        edge_values = edge_values[17:] + [edge_values[0]]
+        edge_values = edge_values[::-1]
+        z_edge = 0.5 * np.array([0, 1] + [3]*12 + [1, 0])
+        y_edge = 0.5 * np.array([4]*2 + list(range(4, -8, -1)) + [-7]*2)
+
+    dists_edge_sq = z_edge ** 2 + y_edge ** 2
+    sin_angles_edge = y_edge / np.sqrt(dists_edge_sq)
+
+    for i in range(nz50):
+        for j in range(ny50):
+            diff_angle = sin_angles_edge - sin_angles[j, i]
+            idx = np.where(np.abs(diff_angle) == np.min(np.abs(diff_angle)))
+            dose_factor = dists_edge_sq[idx[0][0]] / dists_sq[j, i]
+            doseratemap[j, i] = dose_factor * edge_values[idx[0][0]]
+
+    if resolution != 0.5:
+        nz = np.ceil(meters_z / resolution)
+        ny = np.ceil((meters_rear + meters_front) / resolution)
+        # assure odd number pixels (central is central)
+        if ny % 2 == 0:
+            ny += 1
+        doseratemap = resize(doseratemap, (ny, nz))
+    else:
+        nz = nz50
+
+    z_offset = 0
+    y_offset = round(np.ceil((meters_rear) / resolution))
+
+    return (doseratemap, (z_offset, y_offset))
 
 
 def calculate_wall_affect_sector(shape, source_pos, wall_pos):

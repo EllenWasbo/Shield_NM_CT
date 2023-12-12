@@ -6,9 +6,12 @@ Collection of small functions used in ImageQC.
 @author: Ellen Wasbo
 """
 import os
+import numpy as np
 from fnmatch import fnmatch
 from pathlib import Path
 from PyQt5.QtWidgets import QMessageBox
+from matplotlib.path import Path as mplPath
+from matplotlib.transforms import Affine2D
 
 # Shield_NM_CT block start
 from Shield_NM_CT.ui import messageboxes
@@ -209,3 +212,26 @@ def create_empty_folder(folderpath, parent_widget, proceed_info_txt=''):
                 QMessageBox.warning(
                     parent_widget, 'Error',
                     f'Failed creating the folder {error}.')
+
+
+def CT_marker(rotation):
+    """Generate CT marker formed as a CT footprint rotated as stated."""
+    verts = np.array([
+       (0.45, 0.2), (0.45, -0.1), (0.15, -0.1), (0.15, -1.0),
+       (-0.15, -1.0), (-0.15, -0.1), (-0.45, -0.1), (-0.45, 0.2),
+       (0.45, 0.2)
+    ])
+    codes = (
+        [mplPath.MOVETO]
+        + [mplPath.LINETO]*(len(verts) - 2)
+        + [mplPath.CLOSEPOLY]
+        )
+    marker = mplPath(verts, codes)
+
+    correction_factor = 1.
+    if rotation != 0:
+        marker = marker.transformed(Affine2D().rotate_deg(-rotation))
+        bbox = marker.get_extents().get_points()
+        correction_factor = np.max(np.abs(bbox))
+
+    return (marker, correction_factor)

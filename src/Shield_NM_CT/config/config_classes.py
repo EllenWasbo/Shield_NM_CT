@@ -75,7 +75,18 @@ class CT_doserates:
 
     label: str = ''
     tables: list = field(default_factory=list)
-    # list of numpy arrays for the coronal[0] and sagittal[1] doserate tables
+    # list of coronal[0] and sagittal[1] doserate values
+    # coronal: from rear center, along left side, to front center as defined in figure
+    #  = 15 values
+    # sagital: from rear center to above, above, front, bottom, back to rear center
+    #  = 32 values
+
+    # alternatively defined as Wallace et al 2012
+    scatter_factor_rear: float = 0.0
+    rear_stop_angle: int = 40
+    scatter_factor_gantry: float = 0.0
+    front_stop_angle: int = -20
+    scatter_factor_front: float = 0.0
 
 
 @dataclass

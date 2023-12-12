@@ -181,13 +181,13 @@ class InputTab(QWidget):
                     **MARKER_STYLE[self.modality])
                 if self.modality == 'CT':
                     canvas.ax.lines[-1].set_marker(
-                        canvas.CT_marker(self.table_list[i][5])[0])
+                        mini_methods.CT_marker(self.table_list[i][5])[0])
                     canvas.set_CT_marker_properties(-1)
                 self.highlight_selected_in_image()
         else:  # update
             if self.modality == 'CT':
                 canvas.ax.lines[line_index].set_marker(
-                    canvas.CT_marker(self.table_list[self.active_row][5])[0])
+                    mini_methods.CT_marker(self.table_list[self.active_row][5])[0])
                 canvas.set_CT_marker_properties(line_index)
             if x is not None:
                 canvas.ax.lines[line_index].set_data(x, y)
@@ -269,7 +269,7 @@ class InputTab(QWidget):
                                 gid=f'{w.modality}_{i}')
                             if w.modality == 'CT':
                                 canvas.ax.lines[-1].set_marker(
-                                    canvas.CT_marker(w.table_list[i][5])[0])
+                                    mini_methods.CT_marker(w.table_list[i][5])[0])
                                 canvas.set_CT_marker_properties(-1)
 
         self.highlight_selected_in_image()
@@ -1483,8 +1483,8 @@ class OTsourcesTab(InputTab):
         self.table.setColumnWidth(1, 20*self.main.gui.char_width)
         self.table.setColumnWidth(2, 13*self.main.gui.char_width)
         self.table.setColumnWidth(3, 20*self.main.gui.char_width)
-        self.table.setColumnWidth(4, 25*self.main.gui.char_width)
-        self.table.setColumnWidth(5, 25*self.main.gui.char_width)
+        self.table.setColumnWidth(4, 30*self.main.gui.char_width)
+        self.table.setColumnWidth(5, 30*self.main.gui.char_width)
 
         self.table.verticalHeader().setVisible(False)
         self.add_cell_widgets(0)
@@ -1617,8 +1617,10 @@ class PointsTab(InputTab):
         self.table.setCellWidget(row, 0, uir.InputCheckBox(self, row=row, col=0))
         self.table.setCellWidget(row, 1, uir.TextCell(self, row=row, col=1))  # name
         self.table.setCellWidget(row, 2, uir.TextCell(self, row=row, col=2))  # x,y
-        self.table.setCellWidget(row, 3, uir.TextCell(self, row=row, col=3))  # dose
-        self.table.setCellWidget(row, 4, uir.TextCell(self, row=row, col=4))  # doserate
+        self.table.setCellWidget(row, 3, uir.TextCell(self, row=row, col=3,
+                                                      editable=False))  # dose
+        self.table.setCellWidget(row, 4, uir.TextCell(self, row=row, col=4,
+                                                      editable=False))  # doserate
 
     def add_row(self):
         """Add row after selected row (or as last row if none selected).

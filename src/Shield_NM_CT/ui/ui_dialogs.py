@@ -6,13 +6,15 @@
 """
 
 import os
+import numpy as np
 
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5 import QtCore
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QApplication, qApp, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox,
-    QGroupBox, QButtonGroup, QDialogButtonBox, QSpinBox,
+    QGroupBox, QButtonGroup, QDialogButtonBox, QSpinBox, QDoubleSpinBox,
+    QPushButton, QTableWidget,
     QLabel, QRadioButton, QCheckBox, QFileDialog
     )
 
@@ -21,7 +23,9 @@ from Shield_NM_CT.config.Shield_NM_CT_constants import (
     APPDATA, TEMPDIR, ENV_USER_PREFS_PATH, ENV_CONFIG_FOLDER, ENV_ICON_PATH
     )
 from Shield_NM_CT.config.config_func import init_user_prefs
+from Shield_NM_CT.config.config_classes import CT_doserates
 from Shield_NM_CT.ui import messageboxes
+import Shield_NM_CT.ui.reusable_widgets as uir
 import Shield_NM_CT.resources
 # Shield_NM_CT block end
 
@@ -355,3 +359,84 @@ class EditAnnotationsDialog(ShieldDialog):
             self.spin_picker.value(),
             self.spin_snap_radius.value()
             )
+
+
+class EditCTdosemapDialog(ShieldDialog):
+    """Dialog to edit annotation settings."""
+
+    def __init__(self):
+        super().__init__()
+        self.template = None
+
+        self.setWindowTitle('Generate or edit CT dosemap')
+        self.setMinimumHeight(400)
+        self.setMinimumWidth(700)
+
+        vlo = QVBoxLayout()
+        self.setLayout(vlo)
+
+        self.factor_rear = QDoubleSpinBox(decimals=2)
+        self.factor_rear.setValue(0.36)
+        self.factor_gantry = QDoubleSpinBox(value=0.04, decimals=2)
+        self.factor_front = QDoubleSpinBox(value=0.3, decimals=2)
+        self.stop_rear = QSpinBox(value=40, minimum=0, maximum=80)
+        self.stop_front = QSpinBox(value=-20, minimum=-80, maximum=0)
+
+        vlo.addWidget(uir.LabelHeader(
+            'Generate dosemap from scatter factors at 1 m', 4))
+        vlo.addWidget(QLabel('Scatter factors at 1m distance from isocenter:'))
+        flo = QFormLayout()
+        vlo.addLayout(flo)
+        flo.addRow(QLabel('Rear of gantry'), self.factor_rear)
+        flo.addRow(QLabel('Side of gantry'), self.factor_gantry)
+        flo.addRow(QLabel('Front of gantry'), self.factor_front)
+        flo.addRow(QLabel('Gantry angle rear (\u00b0)'), self.stop_rear)
+        flo.addRow(QLabel('Gantry angle front (\u00b0)'), self.stop_front)
+        vlo.addWidget(uir.LabelItalic(
+            'Based on <a href="https://pubmed.ncbi.nlm.nih.gov/22327169/">'
+            'Wallace et al 2012</a>'))
+        btn_alternative1 = QPushButton('Use scatter factors above')
+        btn_alternative1.clicked.connect(self.use_alternative1)
+        vlo.addWidget(btn_alternative1)
+
+        column_headers = [str(val) for val in np.arange(-2, 4, 0.5)]
+        self.cor_table = QTableWidget(4, 12)
+        self.cor_table.setHorizontalHeaderLabels(column_headers)
+        row_labels = [str(val) for val in np.arange(1.5, -0.5, -0.5)]
+        self.cor_table.setVerticalHeaderLabels(row_labels)
+        vlo.addWidget(uir.LabelHeader('Values coronal view', 3))
+        vlo.addWidget(self.cor_table)
+        self.sag_table = QTableWidget(7, 12)
+        self.sag_table.setHorizontalHeaderLabels(column_headers)
+        row_labels = [str(val) for val in np.arange(1.5, -1.5, -0.5)]
+        self.sag_table.setVerticalHeaderLabels(row_labels)
+        vlo.addWidget(uir.LabelHeader('Values sagital view', 3))
+        vlo.addWidget(self.sag_table)
+        btn_alternative2 = QPushButton('Use tabular values above')
+        btn_alternative2.clicked.connect(self.use_alternative2)
+        vlo.addWidget(btn_alternative2)
+
+        buttons = QDialogButtonBox.Cancel
+        self.buttonBox = QDialogButtonBox(buttons)
+        self.buttonBox.rejected.connect(self.reject)
+        vlo.addWidget(self.buttonBox)
+
+    def use_alternative1(self):
+        """Use scatter factors as Wallace 2012."""
+        self.template = CT_doserates(
+            scatter_factor_rear=self.factor_rear.value(),
+            scatter_factor_gantry=self.factor_gantry.value(),
+            scatter_factor_front=self.factor_front.value(),
+            rear_stop_angle=self.stop_rear.value(),
+            front_stop_angle=self.stop_front.value(),
+            )
+        self.accept()
+
+    def use_alternative2(self):
+        """Tabulated CT doserate values."""
+        cor_values = []
+        sag_values = []
+        self.template = CT_doserates(
+            tables=[cor_values, sag_values]
+            )
+        self.accept()

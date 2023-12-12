@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
 from Shield_NM_CT.config.Shield_NM_CT_constants import ENV_ICON_PATH
 from Shield_NM_CT.config import config_func as cff
 from Shield_NM_CT.ui import reusable_widgets as uir
+from Shield_NM_CT.ui.ui_dialogs import EditCTdosemapDialog
 from Shield_NM_CT.ui import messageboxes
 from Shield_NM_CT.scripts.mini_methods import create_empty_file
 from Shield_NM_CT.scripts.mini_methods_format import valid_template_name
@@ -94,6 +95,9 @@ class StackWidget(QWidget):
 
             if self.temp_list:
                 self.refresh_templist(selected_label=initial_template_label)
+                if self.fname == 'ct_doserates':
+                    self.sag_tab.canvas.CTmap_draw()
+                    self.cor_tab.canvas.CTmap_draw()
             else:
                 self.update_data()
 
@@ -205,6 +209,13 @@ class StackWidget(QWidget):
         # self.get_data()  # if get_current_template exist
         self.current_template = copy.deepcopy(self.empty_template)
         self.current_template.label = label
+        if self.fname == 'ct_doserates':
+            dlg = EditCTdosemapDialog()
+            res = dlg.exec()
+            if res:
+                set_template = dlg.template
+                if set_template:
+                    self.current_template = dlg.template
         if len(self.templates) == 0:
             self.templates = [copy.deepcopy(self.current_template)]
         else:
@@ -218,80 +229,10 @@ class StackWidget(QWidget):
     def rename(self, newlabel):
         """Rename selected template."""
         tempno = self.current_labels.index(self.current_template.label)
-        oldlabel = self.templates[self.current_modality][tempno].label
         self.current_template.label = newlabel
         self.templates[tempno].label = newlabel
-
-        save_more = False
-        more = None
-        more_fnames = None
-        log = []
-        #TODO save more?
-        '''
-        if self.fname in ['paramsets', 'quicktest_templates',
-                          'limits_and_plot_templates']:
-            if self.fname in ['limits_and_plot_templates']:
-                if self.current_template.type_vendor:
-                    more_fnames = ['auto_vendor_templates']
-                else:
-                    more_fnames = ['auto_templates']
-            else:
-                more_fnames = ['auto_templates']
-            for more_fname in more_fnames:
-                _, path, auto_templates = cff.load_settings(fname=more_fname)
-
-                if path != '':
-                    if self.fname == 'paramsets':
-                        ref_attr = 'paramset_label'
-                    elif self.fname == 'quicktest_templates':
-                        ref_attr = 'quicktemp_label'
-                    elif self.fname == 'limits_and_plot_templates':
-                        ref_attr = 'limits_and_plot_label'
-                    temp_auto = cff.get_ref_label_used_in_auto_templates(
-                        auto_templates, ref_attr=ref_attr)
-                    _, temp_labels = np.array(temp_auto[mod]).T.tolist()
-                    changed = False
-
-                    if oldlabel in temp_labels:
-                        for i, temp in enumerate(temp_labels):
-                            if temp == oldlabel:
-                                setattr(auto_templates[mod][i], ref_attr, newlabel)
-                                changed = True
-
-                    if changed:
-                        log.append(
-                            f'{self.fname[:-1]} {oldlabel} used in {more_fname}. '
-                            'Label updated.')
-                        save_more = True
-                        if more is None:
-                            more = [auto_templates]
-                        else:
-                            more.append(auto_templates)
-
-        elif self.fname == 'digit_templates':
-            more_fname = f'paramsets_{mod}'
-            more_fnames = [more_fname]
-            _, path, paramsets = cff.load_settings(fname=more_fname)
-
-            if path != '':
-                digit_labels_used = [temp.num_digit_label for temp in paramsets]
-
-                changed = False
-                if oldlabel in digit_labels_used:
-                    for i, temp in enumerate(digit_labels_used):
-                        if temp == oldlabel:
-                            paramsets[i].num_digit_label = newlabel
-                            changed = True
-
-                if changed:
-                    log.append(
-                        f'{self.fname[:-1]} {oldlabel} used in paramsets. '
-                        'Label updated.')
-                    save_more = True
-                    more = [auto_templates]
-        '''
-        self.save(save_more=save_more, more=more,
-                  more_fnames=more_fnames, log=log)
+        #TODO save more? (related templates see imageQCpy settings_reusables)
+        self.save()
         self.refresh_templist(selected_label=newlabel)
 
     def verify_save(self, fname, lastload):
@@ -317,13 +258,6 @@ class StackWidget(QWidget):
         log : list of str, optional
             Log from process of connected templates. The default is [].
         """
-        def ct_doserates_tolist(templates):
-            for key, templist in templates.items():
-                for tempno, temp in enumerate(templist):
-                    for imgno, img in enumerate(temp.images):
-                        if isinstance(img, np.ndarray):  # to list to save to yaml
-                            templates[key][tempno].images[imgno] = img.tolist()
-
         proceed = cff.verify_config_folder(self)
         if proceed:
             templates = self.templates
@@ -331,8 +265,6 @@ class StackWidget(QWidget):
             if errmsg != '':
                 proceed = messageboxes.proceed_question(self, errmsg)
             if proceed:
-                if self.fname == 'ct_doserates':
-                    ct_doserates_tolist(templates)
                 ok_save, path = cff.save_settings(templates, fname=self.fname)
                 if ok_save:
                     if save_more:

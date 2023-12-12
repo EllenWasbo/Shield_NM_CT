@@ -516,12 +516,15 @@ class StatusLabel(QWidget):
 class TextCell(QLineEdit):
     """Text inputs as QLineEdit to trigger action on input changes."""
 
-    def __init__(self, parent, initial_text='', row=-1, col=-1):
+    def __init__(self, parent, initial_text='', row=-1, col=-1, editable=True):
         super().__init__(initial_text)
         self.parent = parent
         # self.textEdited.connect(lambda: self.parent.cell_changed(self.row, self.col))
-        self.editingFinished.connect(
-            lambda: self.parent.cell_changed(self.row, self.col))
+        if editable:
+            self.editingFinished.connect(
+                lambda: self.parent.cell_changed(self.row, self.col))
+        else:
+            self.setReadOnly(True)
         self.row = row
         self.col = col
 

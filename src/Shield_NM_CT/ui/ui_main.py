@@ -31,8 +31,8 @@ from matplotlib.backends.backend_qt5agg import (
 from matplotlib.figure import Figure
 import matplotlib.image as mpimg
 from matplotlib import patches
-from matplotlib.path import Path as mplPath
-from matplotlib.transforms import Affine2D
+#from matplotlib.path import Path as mplPath
+#from matplotlib.transforms import Affine2D
 from matplotlib.colors import LinearSegmentedColormap
 
 # Shield_NM_CT block start
@@ -1313,6 +1313,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                 pass
         self.draw_idle()
 
+    '''
     def CT_marker(self, rotation):
         """Add marker formed as a CT footprint rotated as stated."""
         verts = np.array([
@@ -1334,6 +1335,7 @@ class FloorCanvas(FigureCanvasQTAgg):
             correction_factor = np.max(np.abs(bbox))
 
         return (marker, correction_factor)
+    '''
 
     def set_CT_marker_properties(
             self, index=None, marker=None, highlight=False, hover=False):
@@ -1363,7 +1365,7 @@ class FloorCanvas(FigureCanvasQTAgg):
         row = int(gid_split[1])
         rotation = self.main.CTsources_tab.table_list[row][5]
         if rotation != 0:
-            _, correction_factor = self.CT_marker(rotation)
+            _, correction_factor = mini_methods.CT_marker(rotation)
             size = size * correction_factor
 
         if hover:

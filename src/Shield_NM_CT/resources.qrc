@@ -12,6 +12,7 @@
 		<file alias="colorbar.png">icons\colorbar.png</file>
 		<file alias="copy.png">icons\copy.png</file>
 		<file alias="copy2clipboard.png">icons\copy2clipboard.png</file>
+		<file alias="cor.png">icons\cor.png</file>
 		<file alias="delete.png">icons\delete.png</file>
 		<file alias="deleteRed.png">icons\deleteRed.png</file>
 		<file alias="duplicate.png">icons\duplicate.png</file>
@@ -39,6 +40,7 @@
 		<file alias="open.png">icons\open.png</file>
 		<file alias="refresh.png">icons\refresh.png</file>
 		<file alias="rename.png">icons\rename.png</file>
+		<file alias="sag.png">icons\sag.png</file>
 		<file alias="save.png">icons\save.png</file>
 		<file alias="save_as.png">icons\save_as.png</file>
 		<file alias="search.png">icons\search.png</file>
