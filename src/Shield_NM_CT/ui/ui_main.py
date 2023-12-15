@@ -356,13 +356,11 @@ class MainWindow(QMainWindow):
                 for i, df in enumerate(dd['dose_factors']):
                     if df:
                         if floor == 1:
-                            temp = dd['transmission_maps'][i] / dd['dist_maps'][i]**2
+                            temp = 1. / dd['dist_maps'][i]**2
                         else:
                             temp = 1. / (floor_dist**2 + dd['dist_maps'][i]**2)
-                            if floor == 0:
-                                temp = dd['transmission_floor_0'][i] * temp
-                            else:
-                                temp = dd['transmission_floor_2'][i] * temp
+                        if dd['transmission_maps'][i]:
+                            temp = dd['transmission_maps'][i][floor] * temp
                         nm_dose_map_this = 0.001 * wd * df * self.occ_map * temp
                         self.nm_dose_map = self.nm_dose_map + nm_dose_map_this
                         nm_doserate_map_this = dd['doserate_max_factors'][i] * temp
@@ -375,8 +373,12 @@ class MainWindow(QMainWindow):
                 dd = self.dose_dict['dose_CT']
                 self.ct_dose_map = np.zeros(self.occ_map.shape)
                 for i, df in enumerate(dd['dose_factors']):
-                    if df:
-                        pass # TODO
+                    if df is not None:
+                        if df[i][floor] is not None:
+                            temp = 0.001 * wd * df[i][floor]
+                            if dd['transmission_maps'][i]:
+                                temp = dd['transmission_maps'][i][floor] * temp
+                            self.ct_dose_map = self.ct_dose_map + temp
             else:
                 self.ct_dose_map = np.zeros(2)
             if self.dose_dict['dose_OT']:
@@ -385,9 +387,11 @@ class MainWindow(QMainWindow):
                 for i, df in enumerate(dd['dose_factors']):
                     if df:
                         if floor == 1:
-                            temp = dd['transmission_maps'][i] / dd['dist_maps'][i]**2
+                            temp = 1. / dd['dist_maps'][i]**2
                         else:
-                            temp = 1. / (floor_dist**2 * dd['dist_maps'][i]**2)
+                            temp = 1. / (floor_dist**2 + dd['dist_maps'][i]**2)
+                        if dd['transmission_maps'][i]:
+                            temp = dd['transmission_maps'][i][floor] * temp
                         ot_dose_map_this = 0.001 * wd * df * self.occ_map * temp
                         self.ot_dose_map = self.ot_dose_map + ot_dose_map_this
             else:
@@ -1550,10 +1554,11 @@ class FloorCanvas(FigureCanvasQTAgg):
 
     def update_source_on_drag(self):
         """Update GUI when picked point source dragged."""
-        self.current_artist.set_data(
-            round(self.main.gui.x1),
-            round(self.main.gui.y1)
-            )
+        if self.current_artist:
+            self.current_artist.set_data(
+                round(self.main.gui.x1),
+                round(self.main.gui.y1)
+                )
         self.draw_idle()
 
     def get_dose_overlay(self):

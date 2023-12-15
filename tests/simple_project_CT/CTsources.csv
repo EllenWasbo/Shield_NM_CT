@@ -1,0 +1,2 @@
+;Active;Source name;x,y;kV source;Doserate map;Rotation;kVp correction;mAs pr patient;# pr workday
+0;True;;300, 200;CT 120 kVp;Body;20,0;1,0;4000,0;1,0

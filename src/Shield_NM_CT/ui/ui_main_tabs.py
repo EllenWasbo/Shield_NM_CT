@@ -148,10 +148,13 @@ class InputTab(QWidget):
         if self.active_row > -1:
             text = (f'{self.main.gui.x1:.0f}, {self.main.gui.y1:.0f}')
             tabitem = self.table.cellWidget(self.active_row, 2)
-            tabitem.setText(text)
-            self.table_list[self.active_row][2] = text
-            self.update_source_annotations()
-            self.main.reset_dose()
+            if tabitem:
+                tabitem.setText(text)
+                self.table_list[self.active_row][2] = text
+                self.update_source_annotations()
+                self.main.reset_dose()
+            else:
+                breakpoint()  #why is tabitem None?
 
     def update_current_source_annotation(self):
         """Update annotations for active source."""
@@ -1237,7 +1240,7 @@ class NMsourcesTab(InputTab):
         self.table.setCellWidget(row, 8, uir.CellSpinBox(
             self, initial_value=1., row=row, col=8))
         self.table.setCellWidget(row, 9, uir.CellSpinBox(
-            self, row=row, col=9, max_val=100, step=1, decimals=1))
+            self, row=row, col=9, max_val=100, step=1, decimals=2))
 
     def update_isotopes(self):
         """Update ComboBox of all rows when list of isotopes changed in settings."""
@@ -1302,7 +1305,7 @@ class CTsourcesTab(InputTab):
         super().__init__(
             header='CT sources',
             info=(
-                'For stray radiation using coronal and sagittal doserate map.<br>'
+                'For non isotropic stray radiation.<br>'
                 '(Use "Other sources" if isotropic stray radiation.)<br>'
                 '<br>'
                 'Select position of source in floor plan (mouse click).<br>'
@@ -1314,9 +1317,10 @@ class CTsourcesTab(InputTab):
                 'Shield Data<br>'
                 '   - Doserate map'
                 '   - Rotation = rotation of CT footprint, 0 = gantry up on screen<br>'
-                '   - kVp correction = if CT dosemap defined for max kVp, you may '
-                'correct by a effective factor if kVp generally lower<br>'
-                '   - mAs pr patient = total mAs on average pr CT examination<br>'
+                '   - correction = adjust doserates with a factor e.g. if dosemap '
+                'defined for max kVp, correct to adjust for kVp generally lower<br>'
+                '   - workload pr patient = workload unit (mAs or DLP) given by '
+                'doserate map. Average workload pr CT examination<br>'
                 '   - # pr workday = average number of procedures pr working day. '
                 'Dose multiplied with number of working days specified above.'
                 ),
@@ -1329,10 +1333,10 @@ class CTsourcesTab(InputTab):
         self.table.setHorizontalHeaderLabels(
             ['Active', 'Source name', 'x,y', 'kV source', 'Doserate map',
              'Rotation', 'kVp correction', 'mAs pr patient', '# pr workday'])
-        self.empty_row = [True, '', '', self.main.general_values.kV_sources[0],
-                          'Siemens Edge 140 kVp', 0, 1.0, 4000, 0.0]
         self.kV_source_strings = self.main.general_values.kV_sources
         self.ct_doserate_strings = [x.label for x in self.main.ct_doserates]
+        self.empty_row = [True, '', '', self.kV_source_strings[0],
+                          self.ct_doserate_strings[0], 0, 1.0, 4000, 0.]
         self.table_list = [copy.deepcopy(self.empty_row)]
         self.active_row = 0
         self.table.setColumnWidth(0, 10*self.main.gui.char_width)
@@ -1368,10 +1372,41 @@ class CTsourcesTab(InputTab):
             self, initial_value=4000, row=row, col=7,
             max_val=10000, step=100, decimals=0))  # mAs pr pat
         self.table.setCellWidget(row, 8, uir.CellSpinBox(
-            self, initial_value=30, row=row, col=8, decimals=0))  # pr workday
+            self, initial_value=self.empty_row[-1],
+            row=row, col=8, max_val=100, step=1, decimals=1))  # pr workday
 
     def update_kV_sources(self):
         """Update ComboBox of all rows when list of kV_sources changed from settings."""
+        self.kV_source_strings = [x.label for x in self.main.general_values.kV_sources]
+        self.ct_doserate_strings = [x.label for x in self.main.ct_doserates]
+        warnings = []
+        self.blockSignals(True)
+        for colno in [3, 4]:
+            for row in range(self.table.rowCount()):
+                prev_val = self.get_cell_value(row, colno)
+                self.table.setCellWidget(row, colno, uir.CellCombo(
+                    self, self.kV_source_strings, row=row, col=colno))
+                w = self.table.cellWidget(row, colno)
+                if prev_val in self.kV_source_strings:
+                    w.setCurrentText(prev_val)
+                else:
+                    if prev_val is not None:
+                        txt = 'kV source' if colno == 3 else 'CT doserate map'
+                        warnings.append(
+                            f'{txt} ({prev_val}) no longer available. '
+                            f'Please control {txt} in row number {row}.')
+        self.blockSignals(False)
+        if warnings:
+            dlg = messageboxes.MessageBoxWithDetails(
+                self, title='Warnings',
+                msg='Found issues for selected kV sources or dosemaps',
+                info='See details',
+                icon=QMessageBox.Warning,
+                details=warnings)
+            dlg.exec()
+
+    def update_dosemap_list(self):
+        """Update ComboBox of all rows when list of dosemap changed from settings."""
         self.kV_source_strings = [x.label for x in self.main.general_values.kV_sources]
         warnings = []
         self.blockSignals(True)
@@ -1502,7 +1537,7 @@ class OTsourcesTab(InputTab):
             row=row, col=4, max_val=1000, step=1, decimals=1))  # uSv @1m pr procedure
         self.table.setCellWidget(row, 5, uir.CellSpinBox(
             self, initial_value=0, row=row, col=5,
-            max_val=100, step=1, decimals=0))  # pr workday
+            max_val=100, step=1, decimals=1))  # pr workday
 
     def update_kV_sources(self):
         """Update ComboBox of all rows when list of kV_sources changed from settings."""

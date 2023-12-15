@@ -14,7 +14,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QApplication, qApp, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox,
     QGroupBox, QButtonGroup, QDialogButtonBox, QSpinBox, QDoubleSpinBox,
-    QPushButton, QTableWidget,
+    QPushButton, QTableWidget, QLineEdit,
     QLabel, QRadioButton, QCheckBox, QFileDialog
     )
 
@@ -364,7 +364,7 @@ class EditAnnotationsDialog(ShieldDialog):
 class EditCTdosemapDialog(ShieldDialog):
     """Dialog to edit annotation settings."""
 
-    def __init__(self):
+    def __init__(self, initial_template=CT_doserates()):
         super().__init__()
         self.template = None
 
@@ -375,12 +375,18 @@ class EditCTdosemapDialog(ShieldDialog):
         vlo = QVBoxLayout()
         self.setLayout(vlo)
 
-        self.factor_rear = QDoubleSpinBox(decimals=2)
-        self.factor_rear.setValue(0.36)
-        self.factor_gantry = QDoubleSpinBox(value=0.04, decimals=2)
-        self.factor_front = QDoubleSpinBox(value=0.3, decimals=2)
-        self.stop_rear = QSpinBox(value=40, minimum=0, maximum=80)
-        self.stop_front = QSpinBox(value=-20, minimum=-80, maximum=0)
+        self.factor_rear = QDoubleSpinBox(
+            value=initial_template.scatter_factor_rear, decimals=3)
+        self.factor_gantry = QDoubleSpinBox(
+            value=initial_template.scatter_factor_gantry, decimals=3)
+        self.factor_front = QDoubleSpinBox(
+            value=initial_template.scatter_factor_front, decimals=3)
+        self.stop_rear = QSpinBox(
+            value=initial_template.rear_stop_angle, minimum=0, maximum=80)
+        self.stop_front = QDoubleSpinBox(
+            value=initial_template.front_stop_angle, minimum=-80, maximum=0, decimals=0)
+        self.unit_per = QLineEdit()
+        self.unit_per.setText(initial_template.unit_per)
 
         vlo.addWidget(uir.LabelHeader(
             'Generate dosemap from scatter factors at 1 m', 4))
@@ -392,6 +398,7 @@ class EditCTdosemapDialog(ShieldDialog):
         flo.addRow(QLabel('Front of gantry'), self.factor_front)
         flo.addRow(QLabel('Gantry angle rear (\u00b0)'), self.stop_rear)
         flo.addRow(QLabel('Gantry angle front (\u00b0)'), self.stop_front)
+        flo.addRow(QLabel('\u03bc' + 'Gy/unit where unit is'), self.unit_per)
         vlo.addWidget(uir.LabelItalic(
             'Based on <a href="https://pubmed.ncbi.nlm.nih.gov/22327169/">'
             'Wallace et al 2012</a>'))
@@ -416,14 +423,22 @@ class EditCTdosemapDialog(ShieldDialog):
         btn_alternative2.clicked.connect(self.use_alternative2)
         vlo.addWidget(btn_alternative2)
 
+        self.fill_tables(initial_template.tables)
+
         buttons = QDialogButtonBox.Cancel
         self.buttonBox = QDialogButtonBox(buttons)
         self.buttonBox.rejected.connect(self.reject)
         vlo.addWidget(self.buttonBox)
 
+    def fill_tables(self, values):
+        """Fill tables with current values if any."""
+        if values:
+            pass  #TODO
+
     def use_alternative1(self):
         """Use scatter factors as Wallace 2012."""
         self.template = CT_doserates(
+            unit_per=self.unit_per.text(),
             scatter_factor_rear=self.factor_rear.value(),
             scatter_factor_gantry=self.factor_gantry.value(),
             scatter_factor_front=self.factor_front.value(),
@@ -436,7 +451,9 @@ class EditCTdosemapDialog(ShieldDialog):
         """Tabulated CT doserate values."""
         cor_values = []
         sag_values = []
+        #TODO read tables
         self.template = CT_doserates(
+            unit_per=self.unit_per.text(),
             tables=[cor_values, sag_values]
             )
         self.accept()

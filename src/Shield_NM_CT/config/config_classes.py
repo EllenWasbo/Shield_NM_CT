@@ -74,6 +74,7 @@ class CT_doserates:
     """Dataclass for coronal and sagittal CT doserate tables."""
 
     label: str = ''
+    unit_per: str = 'mAs'  # uGy/?
     tables: list = field(default_factory=list)
     # list of coronal[0] and sagittal[1] doserate values
     # coronal: from rear center, along left side, to front center as defined in figure

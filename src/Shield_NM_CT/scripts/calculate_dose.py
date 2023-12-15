@@ -110,22 +110,32 @@ def calculate_dose(main, source_number=None, modality=None):
 
         main.areas_tab.update_occ_map()
 
+        nNM = 0
         if 'NM' in sources:
             dose_NM = calculate_dose_NM(
                 sources['NM'], main.isotopes, walls, main.shield_data,
                 main.occ_map.shape, calibration_factor, main.general_values,
                 progress_modal, current_progress_value, step, msgs
                 )
-            current_progress_value = 100 * len(sources['NM'])
+            nNM = len(sources['NM'])
+            current_progress_value = 100 * nNM
         else:
             dose_NM = None
 
+        nCT = 0
         if 'CT' in sources and progress_modal.wasCanceled() is False:
-            pass  #TODO
-            current_progress_value = 100 * (len(sources['NM']) + len(sources['CT']))
+            dose_CT = calculate_dose_kV(
+                sources['CT'], main.ct_doserates, walls, main.shield_data,
+                main.occ_map.shape, calibration_factor, main.general_values,
+                progress_modal, current_progress_value, step, msgs
+                )
+            nCT = len(sources['CT'])
+            current_progress_value = 100 * (nNM + nCT)
+        else:
+            dose_CT = None
 
         if 'OT' in sources and progress_modal.wasCanceled() is False:
-            dose_OT = calculate_dose_OT(
+            dose_OT = calculate_dose_kV(
                 sources['OT'], walls, main.shield_data,
                 main.occ_map.shape, calibration_factor, main.general_values,
                 progress_modal, current_progress_value, step, msgs
@@ -145,7 +155,7 @@ def calculate_dose(main, source_number=None, modality=None):
         else:
             main.dose_dict = {
                 'dose_NM': dose_NM,
-                'dose_CT': None,
+                'dose_CT': dose_CT,
                 'dose_OT': dose_OT,
                 }
 
@@ -214,8 +224,6 @@ def get_distance_source(shape, xy, calibration_factor):
     -------
     distance_map : ndarray
         distances to source
-    distance_factor_map : ndarray
-        distance factors (1/dist*2) to source
     """
     sz_y, sz_x = shape
     x, y = xy
@@ -223,168 +231,8 @@ def get_distance_source(shape, xy, calibration_factor):
     distance_map = np.sqrt((xs-x) ** 2 + (ys-y) ** 2)
     distance_map = calibration_factor * distance_map
     distance_map[distance_map < 0.1] = 0.1  # ignore doses closer than 0.5m
-    distance_factors = 1. / (distance_map ** 2)
 
-    return (distance_map, distance_factors)
-
-
-def generate_CT_doseratemap_cor(template,
-                                meters_lateral=1.5, meters_rear=2., meters_front=3.5,
-                                resolution=0.1):
-    """Generate array with doserates based on values from config_classes.CT_doserates.
-
-    Parameters
-    ----------
-    template : config_classes.CT_doserates
-        doserate values at defined positions
-    meters_lateral : float, optional
-        extract values to the given number of meters laterally. The default is 1.5.
-    meters_rear : float, optional
-        extract values to the given number of meters rear of CT iso. The default is 2..
-    meters_front : TYPE, optional
-        extract values to the given number of meters front of CT iso. The default is 2..
-    resolution : float, optional
-        resolution of returnd array in meters/pixel. The default is 0.1.
-
-    Returns
-    -------
-    doseratemap : np.array
-    offset xy: tuple center position of output
-    """
-    # start with 50cm resolution (same as values from doserate table)
-    nx50 = round(np.ceil(meters_lateral / 0.5)) + 1
-    # left side calculated and duplicated
-    ny50 = round(np.ceil((meters_rear + meters_front) / 0.5)) + 1
-    doseratemap = np.zeros((ny50, nx50))
-
-    cy = np.ceil((meters_rear) / 0.5)  # center x and y
-    xs, ys = np.meshgrid(np.arange(nx50), np.arange(ny50) - cy)
-    ys = -ys
-    dists_sq = 0.5 ** 2 * (xs ** 2 + ys ** 2)
-    dists_sq[dists_sq < 0.5**2] = 0.5**2
-    sin_angles = 0.5*ys / np.sqrt(dists_sq)
-
-    tables_len = 0
-    try:
-        tables_len = len(template.tables)
-    except TypeError:
-        tables_len = 0
-    if tables_len:
-        # edge values distances and angles
-        x_edge = 0.5 * np.array([0, 1, 2] + [3]*12 + [2, 1, 0])
-        y_edge = 0.5 * np.array([4]*3 + list(range(4, -8, -1)) + [-7]*3)
-        dists_edge_sq = x_edge ** 2 + y_edge ** 2
-        sin_angles_edge = y_edge / np.sqrt(dists_edge_sq)
-
-        for i in range(nx50):  # left side
-            for j in range(ny50):
-                diff_angle = sin_angles_edge - sin_angles[j, i]
-                idx = np.where(np.abs(diff_angle) == np.min(np.abs(diff_angle)))
-                dose_factor = dists_edge_sq[idx[0][0]] / dists_sq[j, i]
-                doseratemap[j, i] = dose_factor * template.tables[0][idx[0][0]]
-    else:
-        sin_rear = np.sin(template.rear_stop_angle * np.pi() / 180.)
-        sin_front = np.sin(template.front_stop_angle * np.pi() / 180.)
-        doseratemap = template.scatter_factor_gantry / dists_sq
-        doseratemap[sin_angles < sin_front] = template.scatter_factor_front / dists_sq
-        doseratemap[sin_angles > sin_rear] = template.scatter_factor_rear / dists_sq
-
-    if resolution != 0.5:
-        nx = np.ceil(meters_lateral / resolution)
-        ny = np.ceil((meters_rear + meters_front) / resolution)
-        # assure odd number pixels (central is central)
-        if nx % 2 == 0:
-            nx += 1
-        if ny % 2 == 0:
-            ny += 1
-        doseratemap = resize(doseratemap, (ny, nx))
-    else:
-        nx = nx50
-
-    # duplicate and flip in x-dir
-    right_side = np.fliplr(doseratemap[:, 1:])
-    doseratemapfull = np.concatenate((right_side, doseratemap), axis=1)
-
-    x_offset = round(nx // 2)
-    y_offset = round(np.ceil((meters_rear) / resolution))
-
-    return (doseratemapfull, (x_offset, y_offset))
-
-
-def generate_CT_doseratemap_sag(template,
-                                meters_rear=2., meters_front=3.5,
-                                meters_z=1.5, above=True,
-                                resolution=0.1):
-    """Generate array with doserates based on values from config_classes.CT_doserates.
-
-    Parameters
-    ----------
-    values : array like
-        doserate values at defined positions
-    meters_rear : float, optional
-        extract values to the given number of meters rear of CT iso. The default is 2..
-    meters_front : float, optional
-        extract values to the given number of meters front of CT iso. The default is 2..
-    meters_z: float, optional
-        extract values to the given number of meters front of CT iso. The default is 1.5
-        above tells if z is above or below
-    above: bool, optional
-        Calculate doses above or below iso (floor above or below). The default True.
-    resolution : float, optional
-        resolution of returnd array in meters/pixel. The default is 0.1.
-
-    Returns
-    -------
-    doseratemap : np.array
-    offset zy: tuple center position of output
-    """
-    # start with 50cm resolution (same as values from doserate table)
-    nz50 = round(np.ceil(meters_z / 0.5)) + 1
-    ny50 = round(np.ceil((meters_rear + meters_front) / 0.5)) + 1
-    doseratemap = np.zeros((ny50, nz50))
-
-    cy = np.ceil(meters_rear / 0.5)  # center y
-    zs, ys = np.meshgrid(np.arange(nz50), np.arange(ny50) - cy)
-    ys = -ys
-    dists_sq = 0.5 ** 2 * (zs ** 2 + ys ** 2)
-    dists_sq[dists_sq < 0.5**2] = 0.5**2
-    sin_angles = 0.5*ys / np.sqrt(dists_sq)
-
-    # edge values distances and angles
-    if above:
-        edge_values = edge_values[:18]
-        z_edge = 0.5 * np.array([0, 1, 2] + [3]*12 + [2, 1, 0])
-        y_edge = 0.5 * np.array([4]*3 + list(range(4, -8, -1)) + [-7]*3)
-    else:
-        edge_values = edge_values[17:] + [edge_values[0]]
-        edge_values = edge_values[::-1]
-        z_edge = 0.5 * np.array([0, 1] + [3]*12 + [1, 0])
-        y_edge = 0.5 * np.array([4]*2 + list(range(4, -8, -1)) + [-7]*2)
-
-    dists_edge_sq = z_edge ** 2 + y_edge ** 2
-    sin_angles_edge = y_edge / np.sqrt(dists_edge_sq)
-
-    for i in range(nz50):
-        for j in range(ny50):
-            diff_angle = sin_angles_edge - sin_angles[j, i]
-            idx = np.where(np.abs(diff_angle) == np.min(np.abs(diff_angle)))
-            dose_factor = dists_edge_sq[idx[0][0]] / dists_sq[j, i]
-            doseratemap[j, i] = dose_factor * edge_values[idx[0][0]]
-
-    if resolution != 0.5:
-        nz = np.ceil(meters_z / resolution)
-        ny = np.ceil((meters_rear + meters_front) / resolution)
-        # assure odd number pixels (central is central)
-        if ny % 2 == 0:
-            ny += 1
-        doseratemap = resize(doseratemap, (ny, nz))
-    else:
-        nz = nz50
-
-    z_offset = 0
-    y_offset = round(np.ceil((meters_rear) / resolution))
-
-    return (doseratemap, (z_offset, y_offset))
+    return distance_map
 
 
 def calculate_wall_affect_sector(shape, source_pos, wall_pos):
@@ -483,7 +331,7 @@ def calculate_transmission(shield_data, wall_affect_map=1, thickness=0.,
                 sd = data
                 break
         elif kV_source:
-            if data.material == material and data.kV_source == kV_source.label:
+            if data.material == material and data.kV_source == kV_source:
                 sd = data
                 break
 
@@ -569,16 +417,10 @@ def calculate_dose_NM(
         progress_modal, progress_value, step, msgs):
     """Calculate parameters for NM sources."""
     dose_NM = {  # calculated values and arrays listed pr source
-        'dose_pr_workday': np.zeros(map_shape),
-        # np.array shielded and summed [uSv]
-        'doserate_max_pr_workday': np.zeros(map_shape),
-        # np.array shielded and summed [uSv/h]
-        'dist_maps': [],  # dist_factors not saved, easily from 1/(dist_map**2)
-        'dose_factors': [],
-        'doserate_max_factors': [],
-        'transmission_maps': [],
-        'transmission_floor_0': [],
-        'transmission_floor_2': [],
+        'dist_maps': [],  # list of np.array, distances in floor 1
+        'dose_factors': [],  # list of floats - unshielded dose uSv @ 1 m pr day
+        'doserate_max_factors': [],  # list of floats - max doserate uSv/h @ 1m
+        'transmission_maps': [],  # list of list of transmission map pr floor pr source
         }
 
     isotope_labels = [x.label for x in isotopes]
@@ -587,53 +429,57 @@ def calculate_dose_NM(
     for i, source in enumerate(sources):
         if source:
             isotope = isotopes[isotope_labels.index(source[3])]
-            dist_map, dist_factors = get_distance_source(
+            dist_map = get_distance_source(
                 map_shape, source[2], calibration_factor)
             dose_factor, doserate_max_factor = get_dose_factors_NM(
                 source, isotope)
 
-            transmission_map = np.ones(map_shape)
+            transmission_maps = None
             errmsgs = None
-            for wall in walls:
-                progress_value += step
-                progress_modal.setValue(progress_value)
-                if wall:
-                    wall_affect_map, mask = calculate_wall_affect_sector(
-                        map_shape, source[2], wall[2])
-                    if general_values.correct_thickness is False:
-                        wall_affect_map = np.ones(map_shape) * mask
+            if any(walls):
+                transmission_map = np.ones(map_shape)
+                for wall in walls:
+                    progress_value += step
+                    progress_modal.setValue(progress_value)
+                    if wall:
+                        wall_affect_map, mask = calculate_wall_affect_sector(
+                            map_shape, source[2], wall[2])
+                        if general_values.correct_thickness is False:
+                            wall_affect_map = np.ones(map_shape) * mask
 
-                    material = wall[3]
-                    transmission_map_this, errmsg = calculate_transmission(
-                        shield_data, wall_affect_map, thickness=wall[4],
-                        material=material, isotope=isotope)
-                    if errmsg:
-                        errmsgs.append(errmsg)
-                    else:
-                        transmission_map = (
-                            transmission_map * transmission_map_this)
+                        material = wall[3]
+                        transmission_map_this, errmsg = calculate_transmission(
+                            shield_data, wall_affect_map, thickness=wall[4],
+                            material=material, isotope=isotope)
+                        if errmsg:
+                            errmsgs.append(errmsg)
+                        else:
+                            transmission_map = (
+                                transmission_map * transmission_map_this)
 
-            thickness_corr_0 = 1
-            thickness_corr_2 = 1
-            if general_values.correct_thickness:
-                dist = get_floor_distance(0, general_values)
-                thickness_corr_0 = np.sqrt(dist_map ** 2 + dist ** 2) / dist
-                dist = get_floor_distance(2, general_values)
-                thickness_corr_2 = np.sqrt(dist_map ** 2 + dist ** 2) / dist
-            transmission_floor_0, errmsg = calculate_transmission(
-                shield_data, wall_affect_map=thickness_corr_0,
-                thickness=general_values.shield_mm_below,
-                material=general_values.shield_material_below,
-                isotope=isotope)
-            if errmsg:
-                errmsgs.append(errmsg)
-            transmission_floor_2, errmsg = calculate_transmission(
-                shield_data, wall_affect_map=thickness_corr_2,
-                thickness=general_values.shield_mm_above,
-                material=general_values.shield_material_above,
-                isotope=isotope)
-            if errmsg:
-                errmsgs.append(errmsg)
+                thickness_corr_0 = 1
+                thickness_corr_2 = 1
+                if general_values.correct_thickness:
+                    dist = get_floor_distance(0, general_values)
+                    thickness_corr_0 = np.sqrt(dist_map ** 2 + dist ** 2) / dist
+                    dist = get_floor_distance(2, general_values)
+                    thickness_corr_2 = np.sqrt(dist_map ** 2 + dist ** 2) / dist
+                transmission_floor_0, errmsg = calculate_transmission(
+                    shield_data, wall_affect_map=thickness_corr_0,
+                    thickness=general_values.shield_mm_below,
+                    material=general_values.shield_material_below,
+                    isotope=isotope)
+                if errmsg:
+                    errmsgs.append(errmsg)
+                transmission_floor_2, errmsg = calculate_transmission(
+                    shield_data, wall_affect_map=thickness_corr_2,
+                    thickness=general_values.shield_mm_above,
+                    material=general_values.shield_material_above,
+                    isotope=isotope)
+                if errmsg:
+                    errmsgs.append(errmsg)
+
+                transmission_maps = [transmission_floor_0, transmission_map, transmission_floor_2]
 
             if errmsgs:
                 msgs.extend(errmsgs)
@@ -641,16 +487,12 @@ def calculate_dose_NM(
             dose_NM['dist_maps'].append(dist_map)
             dose_NM['dose_factors'].append(dose_factor)
             dose_NM['doserate_max_factors'].append(doserate_max_factor)
-            dose_NM['transmission_maps'].append(transmission_map)
-            dose_NM['transmission_floor_0'].append(transmission_floor_0)
-            dose_NM['transmission_floor_2'].append(transmission_floor_2)
+            dose_NM['transmission_maps'].append(transmission_maps)
         else:
             dose_NM['dist_maps'].append(None)
             dose_NM['dose_factors'].append(None)
             dose_NM['doserate_max_factors'].append(None)
             dose_NM['transmission_maps'].append(None)
-            dose_NM['transmission_floor_0'].append(None)
-            dose_NM['transmission_floor_2'].append(None)
 
         if progress_modal.wasCanceled():
             dose_NM = None
@@ -658,88 +500,283 @@ def calculate_dose_NM(
     return dose_NM
 
 
-def calculate_dose_OT(
-        sources, walls, shield_data,
+def generate_CT_doseratemap(template, plane='cor',
+                            rotation=0., map_shape=(0, 0), source_xy=(0, 0),
+                            meters_lateral=1.5, meters_rear=2., meters_front=3.5,
+                            resolution=0.1):
+    """Generate array with doserates based on values from config_classes.CT_doserates.
+
+    Parameters
+    ----------
+    template : config_classes.CT_doserates
+        doserate values at defined positions
+    plane : str, optional
+        'cor' or 'sag'. Default is 'cor'
+    rotation : float, optional
+        rotation of CT in degrees
+    map_shape : tuple of ints, optional
+        shape of output map
+    source_xy : tuple of ints
+        (x, y) pix position of source in map
+    meters_lateral : float, optional
+        ignored if map_shape and source_xy given
+        extract values to the given number of meters laterally. The default is 1.5.
+    meters_rear : float, optional
+        ignored if map_shape and source_xy given
+        extract values to the given number of meters rear of CT iso. The default is 2..
+    meters_front : float, optional
+        ignored if map_shape and source_xy given
+        extract values to the given number of meters front of CT iso. The default is 2..
+    resolution : float, optional
+        resolution of returnd array in meters/pixel. The default is 0.1.
+
+    Returns
+    -------
+    doseratemap : np.array
+    offset xy: tuple center position of output
+    """
+    # y along CT table at iso
+    if map_shape != (0, 0):
+        doseratemapfull = np.zeros(map_shape)
+        ny, nx = map_shape
+        res_temp = resolution
+        cx, cy = source_xy
+        xs, ys = np.meshgrid(np.arange(nx) - cx, np.arange(ny) - cy)
+        ys = -ys
+        dists_sq = resolution ** 2 * (xs ** 2 + ys ** 2)
+        rot = - rotation * np.pi / 180.
+        ys_rotated = -np.sin(rot)*xs + np.cos(rot)*ys
+        sin_angles = np.divide(resolution * ys_rotated, np.sqrt(dists_sq),
+                               out=np.zeros_like(dists_sq),
+                               where=dists_sq > 0)
+
+        if template.tables:
+            pass  # TODO delete option?
+        else:
+            if template.scatter_factor_front > 0:
+                sin_rear = np.sin(template.rear_stop_angle * np.pi / 180.)
+                sin_front = np.sin(template.front_stop_angle * np.pi / 180.)
+                doseratemap = np.divide(
+                    template.scatter_factor_gantry, dists_sq,
+                    out=np.zeros_like(dists_sq),
+                    where=dists_sq > 0.6**2)
+                doseratemap = np.divide(
+                    template.scatter_factor_front, dists_sq,
+                    out=doseratemap,
+                    where=(sin_angles < sin_front) & (dists_sq > 0.6**2))
+                doseratemap = np.divide(
+                    template.scatter_factor_rear, dists_sq,
+                    out=doseratemap,
+                    where=(sin_angles > sin_rear) & (dists_sq > 0.6**2))
+                doseratemapfull = doseratemap
+                breakpoint()
+
+    else:
+        res_temp = 0.5 if template.tables else resolution
+        # start with 50cm resolution (same as values from doserate table)
+        nx_temp = round(np.ceil(meters_lateral / res_temp)) + 1
+        # left side calculated and duplicated
+        ny_temp = round(np.ceil((meters_rear + meters_front) / res_temp)) + 1
+        cy = np.ceil((meters_rear) / res_temp)  # center x and y
+        doseratemap = np.zeros((ny_temp, nx_temp))
+
+        xs, ys = np.meshgrid(np.arange(nx_temp), np.arange(ny_temp) - cy)
+        ys = -ys
+        dists_sq = res_temp ** 2 * (xs ** 2 + ys ** 2)
+        sin_angles = np.divide(res_temp * ys, np.sqrt(dists_sq), out=np.zeros_like(ys),
+                               where=dists_sq > 0)
+
+        if template.tables:
+            # edge values distances and angles
+            x_edge = 0.5 * np.array([0, 1, 2] + [3]*12 + [2, 1, 0])
+            y_edge = 0.5 * np.array([4]*3 + list(range(4, -8, -1)) + [-7]*3)
+            dists_edge_sq = x_edge ** 2 + y_edge ** 2
+            sin_angles_edge = y_edge / np.sqrt(dists_edge_sq)
+
+            for i in range(nx_temp):  # left side
+                for j in range(ny_temp):
+                    diff_angle = sin_angles_edge - sin_angles[j, i]
+                    idx = np.where(np.abs(diff_angle) == np.min(np.abs(diff_angle)))
+                    if dists_sq[j, i] > 0:
+                        dose_factor = dists_edge_sq[idx[0][0]] / dists_sq[j, i]
+                    else:
+                        dose_factor = 0
+                    doseratemap[j, i] = dose_factor * template.tables[0][idx[0][0]]
+
+            if resolution != 0.5:
+                nx = np.ceil(meters_lateral / resolution)
+                ny = np.ceil((meters_rear + meters_front) / resolution)
+                # assure odd number pixels (central is central)
+                if nx % 2 == 0:
+                    nx += 1
+                if ny % 2 == 0:
+                    ny += 1
+                doseratemap = resize(doseratemap, (ny, nx))
+            else:
+                nx = nx_temp
+        else:
+            if template.scatter_factor_front > 0:
+                sin_rear = np.sin(template.rear_stop_angle * np.pi / 180.)
+                sin_front = np.sin(template.front_stop_angle * np.pi / 180.)
+                doseratemap = np.divide(
+                    template.scatter_factor_gantry, dists_sq,
+                    out=np.zeros_like(dists_sq),
+                    where=dists_sq > 0.6**2)
+                doseratemap = np.divide(
+                    template.scatter_factor_front, dists_sq,
+                    out=doseratemap,
+                    where=(sin_angles < sin_front) & (dists_sq > 0.6**2))
+                doseratemap = np.divide(
+                    template.scatter_factor_rear, dists_sq,
+                    out=doseratemap,
+                    where=(sin_angles > sin_rear) & (dists_sq > 0.6**2))
+                nx = nx_temp
+
+        # duplicate and flip in x-dir
+        right_side = np.fliplr(doseratemap[:, 1:])
+        doseratemapfull = np.concatenate((right_side, doseratemap), axis=1)
+
+    return doseratemapfull
+
+
+def get_dose_factors_CT(source_row, ct_doserates, map_shape, general_values,
+                        calibration_factor):
+    """Calculate dose distribution from source (unshielded, pr workday).
+
+    Parameters
+    ----------
+    source_row : list
+        row from table_list source['CT']
+    ct_doserates : config_classes.CT_doserates
+        info for current doseratemap
+    map_shape : tuple of ints
+        shape of map in pixels (y, x)
+    general_values : config_classes.GeneralValues
+        to get floor heights
+    calibration_factor : float
+        meters/pixel
+
+    Returns
+    -------
+    dose_factors : list of np.array
+        dose in mikroSv pr workday for current source (unshielded) per floor (0,1,2)
+    """
+    _, _, pos, _, _, rotation, correction, units, n_pr_workday = source_row
+
+    general_factor = correction * units * n_pr_workday
+
+    dose_factors_floor0 = None
+    dose_factors_floor1 = general_factor * generate_CT_doseratemap(
+        ct_doserates, rotation=rotation, map_shape=map_shape, source_xy=pos,
+        resolution=calibration_factor)
+    dose_factors_floor2 = None
+
+    breakpoint()
+
+    return [dose_factors_floor0, dose_factors_floor1, dose_factors_floor2]
+
+
+def calculate_dose_kV(
+        sources, ct_doserates, walls, shield_data,
         map_shape, calibration_factor, general_values,
         progress_modal, progress_value, step, msgs):
-    """Calculate parameters for OT (kV isotropic) sources."""
-    dose_OT = {  # calculated values and arrays listed pr source
-        'dose_pr_workday': np.zeros(map_shape),
-        # np.array shielded and summed [uSv]
-        'dist_maps': [],  # dist_factors not saved, easily from 1/(dist_map**2)
+    """Calculate parameters for kV sources, isotropic (OT) or non-isotropic (CT)."""
+    dose_dict = {  # calculated values and arrays listed pr source
+        'dist_maps': [],  # not used for CT
         'dose_factors': [],
-        'transmission_maps': [],
-        'transmission_floor_0': [],
-        'transmission_floor_2': [],
+        # list of float (OT) or lists of dose pr day pr floor (CT) pr source
+        'transmission_maps': [],  # list of transmission_map list of 3 floors pr source
         }
+    mod = 'kV' if ct_doserates is None else 'CT'
 
-    progress_modal.setLabelText("Calculating dose for other kV sources...")
+    progress_modal.setLabelText(f'Calculating dose for {mod} sources...')
 
     for i, source in enumerate(sources):
         if source:
-            dist_map, dist_factors = get_distance_source(
-                map_shape, source[2], calibration_factor)
-            dose_factor = source[4] * source[5]
+            if mod == 'CT':
+                dist_map = None
+                ct_doserates_label = source[4]
+                breakpoint()
+                try:
+                    idx = [c.label for c in ct_doserates].index(ct_doserates_label)
+                    dose_factor = get_dose_factors_CT(
+                        source, ct_doserates[idx], map_shape, general_values,
+                        calibration_factor)
+                except ValueError:
+                    name = str(i) if source[1] == '' else source[1]
+                    msgs.append(f'Failed finding CT doseratemap ({source[4]}) '
+                                f'for CT source {name}')
+                    dose_factor = None
+            else:
+                dist_map = get_distance_source(
+                    map_shape, source[2], calibration_factor)
+                dose_factor = source[4] * source[5]
 
-            transmission_map = np.ones(map_shape)
-            errmsgs = None
-            for wall in walls:
-                progress_value += step
-                progress_modal.setValue(progress_value)
-                if wall:
-                    wall_affect_map, mask = calculate_wall_affect_sector(
-                        map_shape, source[2], wall[2])
-                    if general_values.correct_thickness is False:
-                        wall_affect_map = np.ones(map_shape) * mask
+            if dose_factor is None:  # doseratemap CT not found
+                transmission_map = None
+                transmission_floor_0 = None
+                transmission_floor_2 = None
+            else:
+                transmission_maps = None
+                errmsgs = None
+                if any(walls):
+                    transmission_map = np.ones(map_shape)
+                    for wall in walls:
+                        progress_value += step
+                        progress_modal.setValue(progress_value)
+                        if wall:
+                            wall_affect_map, mask = calculate_wall_affect_sector(
+                                map_shape, source[2], wall[2])
+                            if general_values.correct_thickness is False:
+                                wall_affect_map = np.ones(map_shape) * mask
 
-                    material = wall[3]
-                    transmission_map_this, errmsg = calculate_transmission(
-                        shield_data, wall_affect_map, thickness=wall[4],
-                        material=material, kV_source=source[3])
+                            material = wall[3]
+                            transmission_map_this, errmsg = calculate_transmission(
+                                shield_data, wall_affect_map, thickness=wall[4],
+                                material=material, kV_source=source[3])
+                            if errmsg:
+                                errmsgs.append(errmsg)
+                            else:
+                                transmission_map = (
+                                    transmission_map * transmission_map_this)
+
+                    thickness_corr_0 = 1
+                    thickness_corr_2 = 1
+                    if general_values.correct_thickness:
+                        dist = get_floor_distance(0, general_values)
+                        thickness_corr_0 = np.sqrt(dist_map ** 2 + dist ** 2) / dist
+                        dist = get_floor_distance(2, general_values)
+                        thickness_corr_2 = np.sqrt(dist_map ** 2 + dist ** 2) / dist
+                    transmission_floor_0, errmsg = calculate_transmission(
+                        shield_data, wall_affect_map=thickness_corr_0,
+                        thickness=general_values.shield_mm_below,
+                        material=general_values.shield_material_below,
+                        kV_source=source[3])
                     if errmsg:
                         errmsgs.append(errmsg)
-                    else:
-                        transmission_map = (
-                            transmission_map * transmission_map_this)
+                    transmission_floor_2, errmsg = calculate_transmission(
+                        shield_data, wall_affect_map=thickness_corr_2,
+                        thickness=general_values.shield_mm_above,
+                        material=general_values.shield_material_above,
+                        kV_source=source[3])
+                    if errmsg:
+                        errmsgs.append(errmsg)
 
-            thickness_corr_0 = 1
-            thickness_corr_2 = 1
-            if general_values.correct_thickness:
-                dist = get_floor_distance(0, general_values)
-                thickness_corr_0 = np.sqrt(dist_map ** 2 + dist ** 2) / dist
-                dist = get_floor_distance(2, general_values)
-                thickness_corr_2 = np.sqrt(dist_map ** 2 + dist ** 2) / dist
-            transmission_floor_0, errmsg = calculate_transmission(
-                shield_data, wall_affect_map=thickness_corr_0,
-                thickness=general_values.shield_mm_below,
-                material=general_values.shield_material_below,
-                kV_source=source[3])
-            if errmsg:
-                errmsgs.append(errmsg)
-            transmission_floor_2, errmsg = calculate_transmission(
-                shield_data, wall_affect_map=thickness_corr_2,
-                thickness=general_values.shield_mm_above,
-                material=general_values.shield_material_above,
-                kV_source=source[3])
-            if errmsg:
-                errmsgs.append(errmsg)
+                    transmission_maps = [
+                        transmission_floor_0, transmission_map, transmission_floor_2]
 
             if errmsgs:
                 msgs.extend(errmsgs)
 
-            dose_OT['dist_maps'].append(dist_map)
-            dose_OT['dose_factors'].append(dose_factor)
-            dose_OT['transmission_maps'].append(transmission_map)
-            dose_OT['transmission_floor_0'].append(transmission_floor_0)
-            dose_OT['transmission_floor_2'].append(transmission_floor_2)
+            dose_dict['dist_maps'].append(dist_map)
+            dose_dict['dose_factors'].append(dose_factor)
+            dose_dict['transmission_maps'].append(transmission_maps)
         else:
-            dose_OT['dist_maps'].append(None)
-            dose_OT['dose_factors'].append(None)
-            dose_OT['transmission_maps'].append(None)
-            dose_OT['transmission_floor_0'].append(None)
-            dose_OT['transmission_floor_2'].append(None)
+            dose_dict['dist_maps'].append(None)
+            dose_dict['dose_factors'].append(None)
+            dose_dict['transmission_maps'].append(None)
 
         if progress_modal.wasCanceled():
-            dose_OT = None
+            dose_dict = None
             break
-    return dose_OT
+    return dose_dict

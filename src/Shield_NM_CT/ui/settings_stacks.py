@@ -17,10 +17,9 @@ from PyQt5.QtWidgets import (
     QGroupBox, QToolBar,
     QLabel, QPushButton, QButtonGroup, QRadioButton, QAction, QCheckBox,
     QComboBox, QDoubleSpinBox, QInputDialog, QColorDialog, QTableWidget,
-    QHeaderView, QTableWidgetItem, QMessageBox
+    QTableWidgetItem, QMessageBox
     )
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 
@@ -29,11 +28,11 @@ from Shield_NM_CT.config import config_classes as cfc
 from Shield_NM_CT.config import config_func as cff
 from Shield_NM_CT.ui.settings_reusables import StackWidget
 from Shield_NM_CT.ui import reusable_widgets as uir
+from Shield_NM_CT.ui.ui_dialogs import EditCTdosemapDialog
 from Shield_NM_CT.ui import messageboxes
 from Shield_NM_CT.config.Shield_NM_CT_constants import ENV_ICON_PATH
 from Shield_NM_CT.scripts.mini_methods_format import valid_template_name
-from Shield_NM_CT.scripts.calculate_dose import (
-    generate_CT_doseratemap_cor, generate_CT_doseratemap_sag)
+from Shield_NM_CT.scripts.calculate_dose import generate_CT_doseratemap
 # Shield_NM_CT block end
 
 
@@ -126,6 +125,7 @@ class IsotopeWidget(StackWidget):
     def delete(self):
         """After verifying at will."""
         #TODO, not possible if used in shield data
+        pass
 
 
 class CTmapCanvas(FigureCanvasQTAgg):
@@ -138,6 +138,7 @@ class CTmapCanvas(FigureCanvasQTAgg):
         FigureCanvasQTAgg.__init__(self, self.fig)
         self.parent = parent
         self.table_number = table_number
+        self.overlay = None
 
         fname = 'sag' if table_number == 1 else 'cor'
         stream = QFile(f':/icons/{fname}.png')
@@ -146,54 +147,84 @@ class CTmapCanvas(FigureCanvasQTAgg):
             stream.close()
             self.background = mpl.image.imread(BytesIO(data))
 
+        self.mpl_connect('motion_notify_event', self.on_move)
+
     def update_values(self):
         """Update values according to parent.current_template."""
-        print('self.parent.current_template.tables')
-        print(self.parent.current_template.tables)
-        breakpoint()
-        values = self.parent.current_template.tables[self.table_number]
-        for i, text in enumerate(self.ax.texts):
-            try:
-                text.set_text(f'{values[i]:.4f}')
-            except IndexError:
-                breakpoint()
+        if self.parent.current_template.tables:
+            values = self.parent.current_template.tables[self.table_number]
+            for i, text in enumerate(self.ax.texts):
+                try:
+                    text.set_text(f'{values[i]:.4f}')
+                except IndexError:
+                    break
+        else:
+            for text in self.ax.texts:
+                text.set_text('')
+        self.draw_idle()
+
+    def calculate_overlay(self):
+        """Update overlay data."""
+        plane = 'cor' if self.table_number == 0 else 'sag'
+        overlay, _ = generate_CT_doseratemap(
+                self.parent.current_template, plane=plane,
+                resolution=0.1)
+        self.overlay = overlay.T
+
+    def update_overlay(self):
+        """Refresh overlay shown in image."""
+        try:
+            for coll in self.contours.collections:
+                try:
+                    coll.remove()
+                except ValueError:
+                    pass
+        except AttributeError:
+            pass
+        extent = [200, 1300, 815, 200]
+        self.calculate_overlay()
+        self.contours = self.ax.contour(self.overlay, 10, extent=extent, cmap='hot')
+        self.ax.clabel(self.contours, self.contours.levels)
+
+    def on_move(self, event):
+        """When mouse cursor is moving in the canvas."""
+        val = '-'
+        postxt = 'z = -m, lat = -m, distance = -m'
+        if event.inaxes and len(event.inaxes.get_images()) > 0:
+            zpos = (event.xdata - 600)/200  # corrected for center, 200pix/meter
+            latpos = (event.ydata - 500)/200
+            postxt = (
+                f'z   = {zpos:.1f}m\n'
+                f'lat = {latpos:.1f}m\n'
+                f'distance = {np.sqrt(zpos**2+latpos**2):.1f}m\n'
+                )
+            if self.overlay is not None:
+                jj = round(10*(latpos + 1.5))  # resolution 0.1m/pix, center 1.5,2
+                ii = round(10*(zpos + 2.0))
+                if ii > -1 and jj > -1:
+                    try:
+                        val = f'{self.overlay[jj, ii]:.3f}'
+                    except IndexError:
+                        pass
+
+        self.anchored_text.txt.set_text(
+            f'{postxt}{val} \u03bc' + f'Gy/{self.parent.current_template.unit_per}')
         self.draw_idle()
 
     def CTmap_draw(self):
         """Draw or update isodose map."""
-        if self.table_number == 0:  # cor from rear center clocwise to front center
-            rows = [3, 2, 1] + [0]*12 + [1, 2, 3]
-            cols = [0]*3 + list(range(12)) + [11]*3
-            overlay, _ = generate_CT_doseratemap_cor(
-                self.parent.current_template.tables[self.table_number],
-                resolution=0.1)
-            extent = [200, 1300, 815, 200]
-        else:  # sag 32 values from rear center clockwise
-            rows = [3, 2, 1] + [0]*12 + [1, 2, 3, 4] + [5]*12 + [4]
-            cols = [0]*3 + list(range(12)) + [11]*4 + list(range(11, -1, -1)) + [0]
-            overlay_above, _ = generate_CT_doseratemap_sag(
-                self.parent.current_template.tables[self.table_number],
-                resolution=0.1)
-            overlay_below, _ = generate_CT_doseratemap_sag(
-                self.parent.current_template.tables[self.table_number],
-                above=False, meters_z=1., resolution=0.1)
-            overlay_above = np.fliplr(overlay_above)
-            overlay = np.concatenate((overlay_above, overlay_below[:, 1:]), axis=1)
-            overlay = np.fliplr(overlay)
-            extent = [200, 1300, 705, 200]
+        rows = [3, 2, 1] + [0]*12 + [1, 2, 3]
+        cols = [0]*3 + list(range(12)) + [11]*3
         self.image = self.ax.imshow(self.background)
         self.ax.autoscale(False)
-        overlay = overlay.T
-        #self.image_overlay = self.ax.imshow(
-        #    overlay, cmap='hot', alpha=0.3, extent=extent)
-        self.image_overlay = self.ax.contour(overlay, 10, extent=extent, cmap='hot')
         self.ax.axis('off')
 
-        for i, val in enumerate(
-                self.parent.current_template.tables[self.table_number]):
-            self.ax.text(cols[i]*100 + 200, rows[i]*100 + 200, f'{val:.4f}',
+        for i, val in enumerate(rows):
+            self.ax.text(cols[i]*100 + 200, rows[i]*100 + 200, '',
                          ha='center', va='center',
                          fontsize=self.parent.main.gui.annotations_fontsize)
+        self.anchored_text = mpl.offsetbox.AnchoredText('', loc='lower right')
+        self.ax.add_artist(self.anchored_text)
         self.draw()
 
 
@@ -207,9 +238,9 @@ class CTmapWidget(QWidget):
         self.canvas = CTmapCanvas(self.parent, table_number=table_number)
         vlo = QVBoxLayout()
         self.setLayout(vlo)
+        self.lbl_unit = QLabel('')
         title = 'sagittal' if self.table_number else 'coronal'
-        vlo.addWidget(uir.LabelItalic(
-            f'CT {title} isodose map (' + '\u03bc' + 'Gy/mAs)'))
+        vlo.addWidget(uir.LabelItalic(f'CT {title} isodose map'))
         vlo.addWidget(self.canvas)
 
 
@@ -230,6 +261,10 @@ class CT_doserateWidget(StackWidget):
         self.tabs.addTab(self.cor_tab, "Coronal (same floor)")
         self.tabs.addTab(self.sag_tab, "Sagital (floor above/below)")
 
+        btn_edit = QPushButton('Edit selected template...')
+        btn_edit.clicked.connect(self.run_edit)
+        self.wid_temp_list.vlo.addWidget(btn_edit)
+
         self.hlo.addWidget(self.tabs)
 
         self.vlo.addWidget(uir.HLine())
@@ -239,16 +274,23 @@ class CT_doserateWidget(StackWidget):
         """Refresh GUI after selecting template."""
         self.cor_tab.canvas.update_values()
         self.sag_tab.canvas.update_values()
-
-    def get_current_template(self):
-        """Get self.current_template where not dynamically set."""
-        #TODO read current tables, set current_template.tables
-        pass
+        self.cor_tab.canvas.update_overlay()
+        self.sag_tab.canvas.update_overlay()
 
     def delete(self):
         """Delete selected template."""
         #TODO sure? delete
         pass
+
+    def run_edit(self):
+        """Run edit dialog. Same as when add."""
+        dlg = EditCTdosemapDialog(initial_template=self.current_template)
+        res = dlg.exec()
+        if res:
+            set_template = dlg.template
+            if set_template:
+                self.current_template = dlg.template
+                self.flag_edit(True)
 
 
 class MaterialWidget(StackWidget):

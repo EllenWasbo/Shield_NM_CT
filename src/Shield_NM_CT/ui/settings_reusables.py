@@ -94,10 +94,10 @@ class StackWidget(QWidget):
                 self.fill_list_sources()
 
             if self.temp_list:
-                self.refresh_templist(selected_label=initial_template_label)
                 if self.fname == 'ct_doserates':
                     self.sag_tab.canvas.CTmap_draw()
                     self.cor_tab.canvas.CTmap_draw()
+                self.refresh_templist(selected_label=initial_template_label)
             else:
                 self.update_data()
 
