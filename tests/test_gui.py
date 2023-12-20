@@ -32,11 +32,11 @@ def test_open_project(qtbot):
     # F-18
     main.calculate_dose()
     table_list = main.points_tab.get_table_as_list()
-    doserate_values = [float(row[-1]) for row in table_list[:-1]]
+    doserate_values = [float(row[-1]) for row in table_list[1:-1]]
     expected_doserate_values = [11.26, 14.3, 14.3, 1.29,
                                 2.81, 3.57, 3.57, 0.32]
     assert expected_doserate_values == doserate_values
-    dose_values = [float(row[-2]) for row in table_list[:-1]]
+    dose_values = [float(row[-2]) for row in table_list[1:-1]]
     expected_dose_values = [1.1255, 1.4295, 0.143, 0.1292,
                             0.2814, 0.3574, 0.0357, 0.0323]
     assert expected_dose_values == dose_values
@@ -55,10 +55,10 @@ def test_open_project(qtbot):
     main.gui.current_floor = 1
     main.calculate_dose()
     table_list = main.points_tab.get_table_as_list()
-    doserate_values = [float(row[-1]) for row in table_list[:4]]
+    doserate_values = [float(row[-1]) for row in table_list[1:4]]
     expected_doserate_values = [2.45, 195, 195, 5.02]
     assert doserate_values == expected_doserate_values
-    doserate_2m_concrete == table_list[-2][-1]
+    doserate_2m_concrete = table_list[-2][-1]
     assert doserate_2m_concrete == 1.26
     main.gui.current_floor = 0
     main.sum_dose_days()

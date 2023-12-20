@@ -1,2 +1,0 @@
-;Active;Source name;x,y;kV source;Doserate map;Rotation;kVp correction;mAs pr patient;# pr workday
-0;True;PETCT;295, 10;CT 120 kVp;Siemens Edge 140 kVp;90;0,8;5000;16,0

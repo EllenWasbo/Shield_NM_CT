@@ -90,8 +90,8 @@ class SettingsDialog(ShieldDialog):
         add_widget(parent=self.item_shared_settings, snake='isotopes',
                    title='Isotopes',
                    widget=settings_stacks.IsotopeWidget(self.main))
-        add_widget(parent=self.item_shared_settings, snake='ct_doserates',
-                   title='CT doserate maps',
+        add_widget(parent=self.item_shared_settings, snake='ct_models',
+                   title='CT scatter models',
                    widget=settings_stacks.CT_doserateWidget(self.main))
         add_widget(parent=self.item_shared_settings, snake='materials',
                    title='Materials',

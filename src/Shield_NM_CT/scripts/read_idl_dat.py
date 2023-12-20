@@ -188,17 +188,14 @@ class ReadDat():
             elif fname == 'CTsources':
                 kVp = dict_this['KVP'][0]
                 kV_source = f'CT {kVp} kVp'
-                rotation = dict_this['ROT'][0]
-                if rotation > 180:
-                    rotation -= 180
-                else:
-                    rotation += 180
+                rotation = - dict_this['ROT'][0]
                 kVp_correction = dict_this['KVCORR'][0]
                 mAs = dict_this['MASPRPAT'][0]
                 n_pr_workday = dict_this['NPRWORKDAY'][0]
                 table_list.append([True, name, pos,
-                                   kV_source, 'Siemens Edge 140 kVp',
-                                   rotation, kVp_correction, mAs, n_pr_workday])
+                                   rotation,
+                                   kV_source, 'Siemens140', 'mAs', mAs,
+                                   kVp_correction, n_pr_workday])
 
         if len(table_list) == 0:
             if fname == 'areas':
@@ -212,8 +209,8 @@ class ReadDat():
                     [True, '', '', 'F-18', True, 0.0, 0.0, 0.0, 1.0, 0.0]]
             elif fname == 'CTsources':
                 table_list = [
-                    [True, '', '', self.main.general_values.kV_sources[0],
-                     'Siemens Edge 140 kVp', 0, 1.0, 4000, 0.0]]
+                    [True, '', '', 0., self.main.general_values.kV_sources[0],
+                     'Siemens140', 'mAs', 4000, 1.0, 0.0]]
 
         headers = []
         if fname == 'areas':
@@ -228,9 +225,9 @@ class ReadDat():
                        'A0 (MBq)', 't1 (hours)', 'Duration (hours)', 'Rest void',
                        '# pr workday']
         elif fname == 'CTsources':
-            headers = ['Active', 'Source name', 'x,y', 'kV source',
-                       'Doserate map', 'Rotation', 'kVp correction',
-                       'mAs pr patient', '# pr workday']
+            headers = ['Active', 'Source name', 'x,y', 'Rotation', 'kV source',
+                       'Doserate map', 'Workload unit', 'Workload pr patient',
+                       'Correction', '# pr workday']
 
         if headers:
             table_list.insert(0, headers)

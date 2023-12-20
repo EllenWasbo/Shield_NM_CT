@@ -1,2 +1,2 @@
-;Active;Source name;x,y;kV source;Doserate map;Rotation;kVp correction;mAs pr patient;# pr workday
-0;True;;;CT 120 kVp;Siemens Edge 140 kVp;0,0;1,0;4000,0;1,0
+;Active;Source name;x,y;Rotation;kV source;Scatter model;Workload unit;Workload pr patient;Correction;# pr workday
+0;True;;;0,0;CT 120 kVp;Body;DLP;4000,0;1,0;0,0

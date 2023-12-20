@@ -5,7 +5,7 @@
 		<file alias="materials.yaml">config_defaults\materials.yaml</file>
 		<file alias="shield_data.yaml">config_defaults\shield_data.yaml</file>
 		<file alias="colormaps.yaml">config_defaults\colormaps.yaml</file>
-		<file alias="ct_doserates.yaml">config_defaults\ct_doserates.yaml</file>
+		<file alias="ct_models.yaml">config_defaults\ct_models.yaml</file>
 	</qresource>
 	<qresource prefix="icons">
 		<file alias="add.png">icons\add.png</file>
@@ -40,7 +40,6 @@
 		<file alias="open.png">icons\open.png</file>
 		<file alias="refresh.png">icons\refresh.png</file>
 		<file alias="rename.png">icons\rename.png</file>
-		<file alias="sag.png">icons\sag.png</file>
 		<file alias="save.png">icons\save.png</file>
 		<file alias="save_as.png">icons\save_as.png</file>
 		<file alias="search.png">icons\search.png</file>

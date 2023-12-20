@@ -294,49 +294,6 @@ def get_config_filename(fname, force=False):
     return path
 
 
-#TODO delete? in Shield_NM_CT_constant_functions
-'''
-def load_default_isotopes():
-    """Load default isotopes parameters.
-
-    Returns
-    -------
-    isotopes : list of Isotope
-        Isotope defined in config.config_classes
-    """
-    isotopes = []
-    file = QFile(":/config_defaults/isotopes.yaml")
-    if file.open(QFile.ReadOnly | QFile.Text):
-        data = QTextStream(file).readAll()
-        file.close()
-        docs = yaml.safe_load_all(data)
-        for doc in docs:
-            isotopes.append(cfc.Isotope(**doc))
-
-    return isotopes
-
-
-def load_default_ct_doserates():
-    """Load default CT doserate tables.
-
-    Returns
-    -------
-    ct_data : list of CT_doserates tables
-        config.config_classes.CT_doserates
-    """
-    ct_doserate_data = []
-    file = QFile(":/config_defaults/CT_doserate_data.yaml")
-    if file.open(QIODevice.ReadOnly | QFile.Text):
-        data = QTextStream(file).readAll()
-        file.close()
-        docs = yaml.safe_load_all(data)
-        for doc in docs:
-            ct_doserate_data.append(cfc.CT_doserates(**doc))
-
-    return ct_doserate_data
-'''
-
-
 def load_settings(fname='', temp_config_folder=''):
     """Load settings from yaml file in config folder.
 
@@ -377,9 +334,9 @@ def load_settings(fname='', temp_config_folder=''):
                             if fname == 'isotopes':
                                 updated_doc = verify_input_dict(doc, cfc.Isotope())
                                 settings.append(cfc.Isotope(**updated_doc))
-                            elif fname == 'ct_doserates':
-                                updated_doc = verify_input_dict(doc, cfc.CT_doserates())
-                                settings.append(cfc.CT_doserates(**updated_doc))
+                            elif fname == 'ct_models':
+                                updated_doc = verify_input_dict(doc, cfc.CT_model())
+                                settings.append(cfc.CT_model(**updated_doc))
                             elif fname == 'materials':
                                 updated_doc = verify_input_dict(doc, cfc.Material())
                                 settings.append(cfc.Material(**updated_doc))

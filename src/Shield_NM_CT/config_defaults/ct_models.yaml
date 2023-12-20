@@ -1,0 +1,52 @@
+label: Body
+unit_per: DLP
+scatter_factor_rear: 0.36
+rear_stop_angle: 40
+scatter_factor_gantry: 0.04
+front_stop_angle: -20
+scatter_factor_front: 0.3
+---
+label: Head
+unit_per: DLP
+scatter_factor_rear: 0.14
+rear_stop_angle: 40
+scatter_factor_gantry: 0.014
+front_stop_angle: -20
+scatter_factor_front: 0.14
+---
+label: Siemens140
+unit_per: mAs
+scatter_factor_rear: 0.17
+rear_stop_angle: 40
+scatter_factor_gantry: 0.008
+front_stop_angle: -20
+scatter_factor_front: 0.18
+angle_flatten_rear: 75
+angle_flatten_front: -60
+flatten_power: 1.5
+---
+label: Body flattened
+unit_per: DLP
+scatter_factor_rear: 0.36
+rear_stop_angle: 40
+scatter_factor_gantry: 0.04
+front_stop_angle: -20
+scatter_factor_front: 0.3
+angle_flatten_rear: 60
+angle_flatten_front: -60
+flatten_power: 3.0
+---
+label: Head flattened
+unit_per: DLP
+scatter_factor_rear: 0.14
+rear_stop_angle: 40
+scatter_factor_gantry: 0.014
+front_stop_angle: -20
+scatter_factor_front: 0.14
+angle_flatten_rear: 60
+angle_flatten_front: -60
+---
+
+
+
+

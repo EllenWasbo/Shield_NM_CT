@@ -21,7 +21,6 @@ from PyQt5.QtWidgets import (
 from Shield_NM_CT.config.Shield_NM_CT_constants import ENV_ICON_PATH
 from Shield_NM_CT.config import config_func as cff
 from Shield_NM_CT.ui import reusable_widgets as uir
-from Shield_NM_CT.ui.ui_dialogs import EditCTdosemapDialog
 from Shield_NM_CT.ui import messageboxes
 from Shield_NM_CT.scripts.mini_methods import create_empty_file
 from Shield_NM_CT.scripts.mini_methods_format import valid_template_name
@@ -94,9 +93,6 @@ class StackWidget(QWidget):
                 self.fill_list_sources()
 
             if self.temp_list:
-                if self.fname == 'ct_doserates':
-                    self.sag_tab.canvas.CTmap_draw()
-                    self.cor_tab.canvas.CTmap_draw()
                 self.refresh_templist(selected_label=initial_template_label)
             else:
                 self.update_data()
@@ -209,13 +205,6 @@ class StackWidget(QWidget):
         # self.get_data()  # if get_current_template exist
         self.current_template = copy.deepcopy(self.empty_template)
         self.current_template.label = label
-        if self.fname == 'ct_doserates':
-            dlg = EditCTdosemapDialog()
-            res = dlg.exec()
-            if res:
-                set_template = dlg.template
-                if set_template:
-                    self.current_template = dlg.template
         if len(self.templates) == 0:
             self.templates = [copy.deepcopy(self.current_template)]
         else:

@@ -55,13 +55,18 @@ class TableToolBar(QToolBar):
         act_export.setToolTip('Export table to CSV')
         act_export.triggered.connect(lambda: table.export_csv())
 
+        act_copy = QAction('Copy table to clipboard', self)
+        act_copy.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}copy.png'))
+        act_copy.setToolTip('Copy table to clipboard')
+        act_copy.triggered.connect(lambda: table.copy_table())
+
         act_import = QAction('Import CSV', self)
         act_import.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}import.png'))
         act_import.setToolTip('Import table from CSV')
         act_import.triggered.connect(lambda: table.import_csv())
 
         self.addActions([
-            act_delete, act_add, self.act_duplicate, act_export, act_import])
+            act_delete, act_add, self.act_duplicate, act_export, act_copy, act_import])
 
 
 class InputTab(QWidget):
@@ -105,6 +110,13 @@ class InputTab(QWidget):
         self.hlo.addWidget(self.tb)
         self.hlo.addWidget(self.table)
 
+    def reset_table(self):
+        """Reset table."""
+        self.active_row = 0
+        self.table.setRowCount(1)
+        self.add_cell_widgets(0)
+        self.table_list = [copy.deepcopy(self.empty_row)]
+
     def cell_changed(self, row, col, decimals=None):
         """Value changed by user input."""
         value = self.get_cell_value(row, col)
@@ -129,11 +141,16 @@ class InputTab(QWidget):
                 self.update_wall_annotation(row, remove_already=True)
                 self.highlight_selected_in_image()
                 if self.main.dose_dict:
-                    self.main.reset_dose()  # TODO or calculate dose?
+                    self.main.reset_dose()  # TODO auto recalculate?
             elif 'source' in self.label:
                 self.update_current_source_annotation()
+                if col == 5 and 'CT' in self.label:
+                    w_map = self.table.cellWidget(row, 5)
+                    idx = w_map.currentIndex()
+                    w_unit = self.table.cellWidget(row, 6)
+                    w_unit.setText(self.ct_doserate_units[idx])
+                    self.table_list[row][6] = self.ct_doserate_units[idx]
                 if self.main.dose_dict:
-                    print(f'calculate row {row}')
                     self.main.calculate_dose(source_number=row, modality=self.modality)
             elif self.label == 'point':
                 self.update_current_source_annotation()
@@ -180,17 +197,17 @@ class InputTab(QWidget):
                 canvas.ax.plot(
                     x, y, markersize=self.main.gui.annotations_markersize[0],
                     markeredgewidth=1, picker=self.main.gui.picker,
-                    gid=f'{self.modality}_{line_index}',
+                    gid=f'{self.modality}_{self.active_row}',
                     **MARKER_STYLE[self.modality])
                 if self.modality == 'CT':
                     canvas.ax.lines[-1].set_marker(
-                        mini_methods.CT_marker(self.table_list[i][5])[0])
-                    canvas.set_CT_marker_properties(-1)
+                        mini_methods.CT_marker(self.table_list[self.active_row][3])[0])
+                    canvas.set_CT_marker_properties(self.active_row)
                 self.highlight_selected_in_image()
         else:  # update
             if self.modality == 'CT':
                 canvas.ax.lines[line_index].set_marker(
-                    mini_methods.CT_marker(self.table_list[self.active_row][5])[0])
+                    mini_methods.CT_marker(self.table_list[self.active_row][3])[0])
                 canvas.set_CT_marker_properties(line_index)
             if x is not None:
                 canvas.ax.lines[line_index].set_data(x, y)
@@ -272,8 +289,8 @@ class InputTab(QWidget):
                                 gid=f'{w.modality}_{i}')
                             if w.modality == 'CT':
                                 canvas.ax.lines[-1].set_marker(
-                                    mini_methods.CT_marker(w.table_list[i][5])[0])
-                                canvas.set_CT_marker_properties(-1)
+                                    mini_methods.CT_marker(w.table_list[i][3])[0])
+                                canvas.set_CT_marker_properties(index=-1)
 
         self.highlight_selected_in_image()
 
@@ -310,7 +327,7 @@ class InputTab(QWidget):
             pass
 
     def update_row_number(self, first_row_to_adjust, row_adjust):
-        """Adjust row number of cell widgets after inserting/deleting rows.
+        """Adjust row number of cell widgets+annotations after inserting/deleting rows.
 
         Parameters
         ----------
@@ -323,6 +340,12 @@ class InputTab(QWidget):
             for j in range(self.table.columnCount()):
                 w = self.table.cellWidget(i, j)
                 w.row = w.row + row_adjust
+        if 'source' in self.label:
+            self.update_source_annotations(modalities=[self.modality])
+        elif self.label == 'Areas':
+            self.update_occ_map()
+        elif self.label == 'Walls':
+            self.update_wall_annotations()
 
     def delete_row(self):
         """Delete selected row.
@@ -430,6 +453,15 @@ class InputTab(QWidget):
                 df = pd.DataFrame(datalist[1:], columns=datalist[0])
                 df.to_csv(path, sep=self.main.general_values.csv_separator,
                           decimal=self.main.general_values.csv_decimal)
+
+    def copy_table(self):
+        """Copy table to clipboard."""
+        datalist = self.get_table_as_list()
+        if len(datalist) > 0:
+            df = pd.DataFrame(datalist)
+            df.to_clipboard(index=False, excel=True, header=None)
+            QMessageBox.information(self, 'Table in clipboard',
+                        'Values in table are copied to clipboard.',)
 
     def import_csv(self, path='', ncols_expected=5):
         """Import table from csv."""
@@ -540,7 +572,7 @@ class ScaleTab(InputTab):
         self.vlo.addLayout(hlo_heights)
         img_lbl = QLabel()
         im = QPixmap(':/icons/heights.png')
-        im = im.scaledToWidth(round(self.main.gui.panel_width*0.4))
+        im = im.scaledToWidth(round(self.main.gui.panel_width*0.3))
         img_lbl.setPixmap(im)
         hlo_heights.addWidget(img_lbl)
         vlo_heights = QVBoxLayout()
@@ -590,7 +622,7 @@ class ScaleTab(InputTab):
                 content = self.sender().currentText()
             except AttributeError:
                 content = None
-        if content:
+        if content is not None:
             setattr(self.main.general_values, attribute, content)
             if self.main.dose_dict:
                 reset_dose = False
@@ -598,6 +630,9 @@ class ScaleTab(InputTab):
                     reset_dose = True
                 elif isinstance(content, str):
                     reset_dose = True
+                elif isinstance(content, float):
+                    if 'dose_CT' in self.main.dose_dict:
+                        reset_dose = True
                 if reset_dose:
                     self.main.reset_dose()
 
@@ -782,19 +817,21 @@ class AreasTab(InputTab):
             self.main.wFloorDisplay.canvas.add_area_highlight(
                 x0, y0, width, height)
 
-    def update_occ_map(self, update_overlay=True):
+    def update_occ_map(self, update_overlay=True, update_patches=True):
         """Update array containing occupation factors and redraw."""
         self.main.occ_map = np.ones(self.main.image.shape[0:2])
         if self.main.gui.current_floor == 1:
-            if len(self.main.wFloorDisplay.canvas.ax.patches) > 0:
-                index_patches = []
-                for i, patch in enumerate(self.main.wFloorDisplay.canvas.ax.patches):
-                    index_patches.append(i)
-                if len(index_patches) > 0:
-                    index_patches.reverse()
-                    for i in index_patches:
-                        self.main.wFloorDisplay.canvas.ax.patches[i].remove()
-            self.main.wFloorDisplay.canvas.reset_hover_pick()
+            if update_patches:
+                if len(self.main.wFloorDisplay.canvas.ax.patches) > 0:
+                    index_patches = []
+                    for i, patch in enumerate(
+                            self.main.wFloorDisplay.canvas.ax.patches):
+                        index_patches.append(i)
+                    if len(index_patches) > 0:
+                        index_patches.reverse()
+                        for i in index_patches:
+                            self.main.wFloorDisplay.canvas.ax.patches[i].remove()
+                self.main.wFloorDisplay.canvas.reset_hover_pick()
 
             areas_this = []
             for i in range(self.table.rowCount()):
@@ -803,16 +840,19 @@ class AreasTab(InputTab):
                     x0, y0, width, height = mini_methods.get_area_from_text(
                         tabitem.text())
                     self.main.occ_map[y0:y0+height, x0:x0+width] = self.table_list[i][3]
-                    areas_this.append(Rectangle(
-                        (x0, y0), width, height, edgecolor='blue',
-                        linewidth=self.main.gui.annotations_linethick, fill=False,
-                        picker=True, gid=f'areas_{i}'))
-                    self.main.wFloorDisplay.canvas.ax.add_patch(areas_this[-1])
-            self.main.wFloorDisplay.canvas.image_overlay.set_data(self.main.occ_map)
+                    if update_patches:
+                        areas_this.append(Rectangle(
+                            (x0, y0), width, height, edgecolor='blue',
+                            linewidth=self.main.gui.annotations_linethick, fill=False,
+                            picker=True, gid=f'areas_{i}'))
+                        self.main.wFloorDisplay.canvas.ax.add_patch(areas_this[-1])
+            if update_overlay:
+                self.main.wFloorDisplay.canvas.image_overlay.set_data(self.main.occ_map)
         if update_overlay:
             self.main.wFloorDisplay.canvas.image_overlay.set(
                 cmap='rainbow', alpha=self.main.gui.alpha_overlay, clim=(0., 1.))
-        self.main.wFloorDisplay.canvas.draw_idle()
+        if update_overlay or update_patches:
+            self.main.wFloorDisplay.canvas.draw_idle()
 
     def delete_row(self):
         """Delete selected row."""
@@ -1286,7 +1326,7 @@ class NMsourcesTab(InputTab):
             self.table.cellWidget(added_row, 6).setValue(float(values_above[6]))
             self.table.cellWidget(added_row, 7).setValue(float(values_above[7]))
             self.table.cellWidget(added_row, 8).setValue(float(values_above[8]))
-            self.table.cellWidget(added_row, 9).setValue(int(values_above[9]))
+            self.table.cellWidget(added_row, 9).setValue(float(values_above[9]))
 
             for i in range(self.table.columnCount()):
                 self.table.cellWidget(added_row, i).blockSignals(False)
@@ -1305,49 +1345,53 @@ class CTsourcesTab(InputTab):
         super().__init__(
             header='CT sources',
             info=(
-                'For non isotropic stray radiation.<br>'
-                '(Use "Other sources" if isotropic stray radiation.)<br>'
+                'For non isotropic scatter factors.<br>'
+                '(Use "Other kV sources" if isotropic scatter factors.)<br>'
                 '<br>'
                 'Select position of source in floor plan (mouse click).<br>'
                 'Select the row for which you want to set this source position.<br>'
                 'Press the "Get..."-button to fetch the coordinates.<br>'
                 '<br>'
                 'Specify parameters for the sources:<br>'
-                '   - kV source = Select named kV-source as defined in Settings - '
+                '   - Rotation = rotation of CT footprint<br>'
+                '   - kV source = for shielding properties as defined in Settings - '
                 'Shield Data<br>'
-                '   - Doserate map'
-                '   - Rotation = rotation of CT footprint, 0 = gantry up on screen<br>'
-                '   - correction = adjust doserates with a factor e.g. if dosemap '
+                '   - Doserate map = for non-isotropic scatter factors<br>'
+                '   - correction = factor to adjust dose e.g. if dosemap '
                 'defined for max kVp, correct to adjust for kVp generally lower<br>'
-                '   - workload pr patient = workload unit (mAs or DLP) given by '
+                '   - workload pr patient = workload unit given by '
                 'doserate map. Average workload pr CT examination<br>'
                 '   - # pr workday = average number of procedures pr working day. '
-                'Dose multiplied with number of working days specified above.'
+                'Dose multiplied with number of working days specified.'
                 ),
             btn_get_pos_text='Get source coordinates as marked in image')
 
         self.modality = 'CT'
         self.label = f'{self.modality} sources'
         self.main = main
-        self.table.setColumnCount(9)
+        self.table.setColumnCount(10)
         self.table.setHorizontalHeaderLabels(
-            ['Active', 'Source name', 'x,y', 'kV source', 'Doserate map',
-             'Rotation', 'kVp correction', 'mAs pr patient', '# pr workday'])
+            ['Active', 'Source name', 'x,y', 'Rotation', 'kV source',
+             'Scatter model', 'Workload unit', 'Workload pr patient', 'Correction',
+             '# pr workday'])
         self.kV_source_strings = self.main.general_values.kV_sources
-        self.ct_doserate_strings = [x.label for x in self.main.ct_doserates]
-        self.empty_row = [True, '', '', self.kV_source_strings[0],
-                          self.ct_doserate_strings[0], 0, 1.0, 4000, 0.]
+        self.ct_doserate_strings = [x.label for x in self.main.ct_models]
+        self.ct_doserate_units = [x.unit_per for x in self.main.ct_models]
+        self.empty_row = [True, '', '', 0, self.kV_source_strings[0],
+                          self.ct_doserate_strings[0], self.ct_doserate_units[0],
+                          4000, 1.0, 0.]
         self.table_list = [copy.deepcopy(self.empty_row)]
         self.active_row = 0
-        self.table.setColumnWidth(0, 10*self.main.gui.char_width)
+        self.table.setColumnWidth(0, 8*self.main.gui.char_width)
         self.table.setColumnWidth(1, 20*self.main.gui.char_width)
         self.table.setColumnWidth(2, 13*self.main.gui.char_width)
-        self.table.setColumnWidth(3, 20*self.main.gui.char_width)
-        self.table.setColumnWidth(4, 25*self.main.gui.char_width)
-        self.table.setColumnWidth(5, 13*self.main.gui.char_width)
-        self.table.setColumnWidth(6, 19*self.main.gui.char_width)
-        self.table.setColumnWidth(7, 19*self.main.gui.char_width)
-        self.table.setColumnWidth(8, 19*self.main.gui.char_width)
+        self.table.setColumnWidth(3, 11*self.main.gui.char_width)
+        self.table.setColumnWidth(4, 17*self.main.gui.char_width)
+        self.table.setColumnWidth(5, 18*self.main.gui.char_width)
+        self.table.setColumnWidth(6, 18*self.main.gui.char_width)
+        self.table.setColumnWidth(7, 25*self.main.gui.char_width)
+        self.table.setColumnWidth(8, 13*self.main.gui.char_width)
+        self.table.setColumnWidth(9, 19*self.main.gui.char_width)
 
         self.table.verticalHeader().setVisible(False)
         self.add_cell_widgets(0)
@@ -1358,30 +1402,33 @@ class CTsourcesTab(InputTab):
         self.table.setCellWidget(row, 0, uir.InputCheckBox(self, row=row, col=0))
         self.table.setCellWidget(row, 1, uir.TextCell(self, row=row, col=1))  # name
         self.table.setCellWidget(row, 2, uir.TextCell(self, row=row, col=2))  # x,y
-        self.table.setCellWidget(row, 3, uir.CellCombo(
-            self, self.kV_source_strings, row=row, col=3))  # kV source
-        self.table.setCellWidget(row, 4, uir.CellCombo(
-            self, self.ct_doserate_strings, row=row, col=4))  # doserate map
-        self.table.setCellWidget(row, 5, uir.CellSpinBox(
-            self, row=row, col=5, min_val=-360, max_val=360,
+        self.table.setCellWidget(row, 3, uir.CellSpinBox(
+            self, row=row, col=3, min_val=-360, max_val=360,
             step=45, decimals=0))  # rot
-        self.table.setCellWidget(row, 6, uir.CellSpinBox(
-            self, initial_value=1.,
-            row=row, col=6, max_val=1.0, step=0.1, decimals=2))  # kVp corr
+        self.table.setCellWidget(row, 4, uir.CellCombo(
+            self, self.kV_source_strings, row=row, col=4))  # kV source
+        self.table.setCellWidget(row, 5, uir.CellCombo(
+            self, self.ct_doserate_strings, row=row, col=5))  # doserate map
+        self.table.setCellWidget(row, 6, uir.TextCell(  # doserate map unit_per
+            self, initial_text=self.empty_row[6], editable=False, row=row, col=6))
         self.table.setCellWidget(row, 7, uir.CellSpinBox(
             self, initial_value=4000, row=row, col=7,
-            max_val=10000, step=100, decimals=0))  # mAs pr pat
+            max_val=10000, step=100, decimals=0))  # units pr pat
         self.table.setCellWidget(row, 8, uir.CellSpinBox(
+            self, initial_value=1.,
+            row=row, col=8, max_val=1.0, step=0.1, decimals=2))  # kVp corr
+        self.table.setCellWidget(row, 9, uir.CellSpinBox(
             self, initial_value=self.empty_row[-1],
-            row=row, col=8, max_val=100, step=1, decimals=1))  # pr workday
+            row=row, col=9, max_val=100, step=1, decimals=1))  # pr workday
 
     def update_kV_sources(self):
         """Update ComboBox of all rows when list of kV_sources changed from settings."""
         self.kV_source_strings = [x.label for x in self.main.general_values.kV_sources]
-        self.ct_doserate_strings = [x.label for x in self.main.ct_doserates]
+        self.ct_doserate_strings = [x.label for x in self.main.ct_models]
+        self.ct_doserate_units = [x.unit_per for x in self.main.ct_models]
         warnings = []
-        self.blockSignals(True)
-        for colno in [3, 4]:
+        #self.blockSignals(True)
+        for colno in [4, 5]:
             for row in range(self.table.rowCount()):
                 prev_val = self.get_cell_value(row, colno)
                 self.table.setCellWidget(row, colno, uir.CellCombo(
@@ -1391,42 +1438,15 @@ class CTsourcesTab(InputTab):
                     w.setCurrentText(prev_val)
                 else:
                     if prev_val is not None:
-                        txt = 'kV source' if colno == 3 else 'CT doserate map'
+                        txt = 'kV source' if colno == 4 else 'CT doserate map'
                         warnings.append(
                             f'{txt} ({prev_val}) no longer available. '
                             f'Please control {txt} in row number {row}.')
-        self.blockSignals(False)
+        #self.blockSignals(False)
         if warnings:
             dlg = messageboxes.MessageBoxWithDetails(
                 self, title='Warnings',
                 msg='Found issues for selected kV sources or dosemaps',
-                info='See details',
-                icon=QMessageBox.Warning,
-                details=warnings)
-            dlg.exec()
-
-    def update_dosemap_list(self):
-        """Update ComboBox of all rows when list of dosemap changed from settings."""
-        self.kV_source_strings = [x.label for x in self.main.general_values.kV_sources]
-        warnings = []
-        self.blockSignals(True)
-        for row in range(self.table.rowCount()):
-            prev_val = self.get_cell_value(row, 3)
-            self.table.setCellWidget(row, 3, uir.CellCombo(
-                self, self.kV_source_strings, row=row, col=3))
-            w = self.table.cellWidget(row, 3)
-            if prev_val in self.kV_source_strings:
-                w.setCurrentText(prev_val)
-            else:
-                if prev_val is not None:
-                    warnings.append(
-                        f'kV source ({prev_val}) no longer available. '
-                        f'Please control source in row number {row}.')
-        self.blockSignals(False)
-        if warnings:
-            dlg = messageboxes.MessageBoxWithDetails(
-                self, title='Warnings',
-                msg='Found issues for selected source types',
                 info='See details',
                 icon=QMessageBox.Warning,
                 details=warnings)
@@ -1463,12 +1483,13 @@ class CTsourcesTab(InputTab):
             self.table.cellWidget(added_row, 0).setChecked(values_above[0])
             self.table.cellWidget(added_row, 1).setText(values_above[1] + '_copy')
             self.table.cellWidget(added_row, 2).setText(values_above[2])
-            self.table.cellWidget(added_row, 3).setCurrentText(values_above[3])
+            self.table.cellWidget(added_row, 3).setValue(int(values_above[3]))
             self.table.cellWidget(added_row, 4).setCurrentText(values_above[4])
-            self.table.cellWidget(added_row, 5).setValue(int(values_above[5]))
-            self.table.cellWidget(added_row, 6).setValue(float(values_above[6]))
+            self.table.cellWidget(added_row, 5).setCurrentText(values_above[5])
+            self.table.cellWidget(added_row, 6).setText(values_above[6])
             self.table.cellWidget(added_row, 7).setValue(int(values_above[7]))
-            self.table.cellWidget(added_row, 8).setValue(int(values_above[8]))
+            self.table.cellWidget(added_row, 8).setValue(float(values_above[8]))
+            self.table.cellWidget(added_row, 9).setValue(float(values_above[9]))
 
             for i in range(self.table.columnCount()):
                 self.table.cellWidget(added_row, i).blockSignals(False)
@@ -1599,7 +1620,7 @@ class OTsourcesTab(InputTab):
             self.table.cellWidget(added_row, 2).setText(values_above[2])
             self.table.cellWidget(added_row, 3).setCurrentText(values_above[3])
             self.table.cellWidget(added_row, 4).setValue(float(values_above[4]))
-            self.table.cellWidget(added_row, 5).setValue(int(values_above[5]))
+            self.table.cellWidget(added_row, 5).setValue(float(values_above[5]))
 
             for i in range(self.table.columnCount()):
                 self.table.cellWidget(added_row, i).blockSignals(False)

@@ -145,7 +145,7 @@ class MainWindow(QMainWindow):
         self.CTsources_tab = ui_main_tabs.CTsourcesTab(self)
         self.OTsources_tab = ui_main_tabs.OTsourcesTab(self)
         self.points_tab = ui_main_tabs.PointsTab(self)
-        self.tabs.addTab(self.scale_tab, "Scale")
+        self.tabs.addTab(self.scale_tab, "Scale and floors")
         self.tabs.addTab(self.areas_tab, "Areas")
         self.tabs.addTab(self.walls_tab, "Walls")
         self.tabs.addTab(self.NMsources_tab, "NM sources")
@@ -230,7 +230,7 @@ class MainWindow(QMainWindow):
         _, _, self.user_prefs = cff.load_user_prefs()
         _, _, self.isotopes = cff.load_settings(fname='isotopes')
         _, _, self.materials = cff.load_settings(fname='materials')
-        _, _, self.ct_doserates = cff.load_settings(fname='ct_doserates')
+        _, _, self.ct_models = cff.load_settings(fname='ct_models')
         _, _, self.shield_data = cff.load_settings(fname='shield_data')
         _, _, self.general_values = cff.load_settings(fname='general_values')
         _, _, self.colormaps = cff.load_settings(fname='colormaps')
@@ -304,14 +304,18 @@ class MainWindow(QMainWindow):
 
     def floor_changed(self):
         """Update when current floor changed."""
-        floor = self.wCalculate.btns_floor.checkedId()
+        sel_idx = self.wCalculate.btns_floor.checkedId()
+        if sel_idx == 0:
+            floor = 2
+        elif sel_idx == 1:
+            floor = 1
+        else:
+            floor = 0
         if floor != self.gui.current_floor:  # changed
             self.gui.current_floor = floor
             self.areas_tab.update_occ_map()
             if self.dose_dict:
                 self.sum_dose_days()
-                if 'Dose' in self.wVisual.overlay_text():
-                    self.wFloorDisplay.canvas.update_dose_overlay()
 
     def reset_dose(self):
         """Reset dose calculations."""
@@ -321,8 +325,9 @@ class MainWindow(QMainWindow):
         self.ct_dose_map = np.zeros(2)
         self.ot_dose_map = np.zeros(2)
         self.update_calculation_points()
-        if 'Dose' not in self.wVisual.overlay_text():
+        if 'Dose' in self.wVisual.overlay_text():
             self.wFloorDisplay.canvas.update_dose_overlay()
+        #TODO Info that dose is reset?
 
     def calculate_dose(self, source_number=None, modality=None):
         """Calculate dose and update self.dose_dict."""
@@ -340,8 +345,8 @@ class MainWindow(QMainWindow):
             self.sum_dose_days()
             if 'Dose' not in self.wVisual.overlay_text():
                 self.wVisual.btns_overlay.button(2).setChecked(True)
-            self.wFloorDisplay.canvas.update_dose_overlay()
-            self.wVisual.colorbar.colorbar_draw()
+                self.wFloorDisplay.canvas.update_dose_overlay()
+                self.wVisual.colorbar.colorbar_draw()
 
     def sum_dose_days(self):
         """Sum dose on number of working days changed."""
@@ -374,8 +379,8 @@ class MainWindow(QMainWindow):
                 self.ct_dose_map = np.zeros(self.occ_map.shape)
                 for i, df in enumerate(dd['dose_factors']):
                     if df is not None:
-                        if df[i][floor] is not None:
-                            temp = 0.001 * wd * df[i][floor]
+                        if df[floor] is not None:
+                            temp = 0.001 * wd * df[floor]
                             if dd['transmission_maps'][i]:
                                 temp = dd['transmission_maps'][i][floor] * temp
                             self.ct_dose_map = self.ct_dose_map + temp
@@ -397,30 +402,43 @@ class MainWindow(QMainWindow):
             else:
                 self.ot_dose_map = np.zeros(2)
             self.update_calculation_points()
-            self.wFloorDisplay.canvas.update_dose_overlay()
+            if 'Dose' in self.wVisual.overlay_text():
+                self.wFloorDisplay.canvas.update_dose_overlay()
 
     def update_calculation_points(self):
         """Update dose to calculation points."""
         if self.dose_dict:
             for i, point in enumerate(self.points_tab.table_list):
                 x, y = mini_methods.get_pos_from_text(point[2])
-                if x and y:
+                if x and y and self.occ_map.size > 2:
                     dose = 0
-                    if self.nm_dose_map.shape == self.occ_map.shape:
-                        dose = self.nm_dose_map[y, x]
-                    if self.ct_dose_map.shape == self.occ_map.shape:
-                        dose += self.ct_dose_map[y, x]
-                    if self.ot_dose_map.shape == self.occ_map.shape:
-                        dose += self.ot_dose_map[y, x]
+                    try:
+                        if self.nm_dose_map.shape == self.occ_map.shape:
+                            dose = self.nm_dose_map[y, x]
+                        if self.ct_dose_map.shape == self.occ_map.shape:
+                            dose += self.ct_dose_map[y, x]
+                        if self.ot_dose_map.shape == self.occ_map.shape:
+                            dose += self.ot_dose_map[y, x]
+                    except IndexError:
+                        pass
                     if dose > 0:
-                        dose_string = f'{dose:.4f}'
+                        if dose > 0.001:
+                            dose_string = f'{dose:.4f}'
+                        else:
+                            dose_string = f'{dose:.2g}'
                     else:
                         dose_string = '0'
                     self.points_tab.table_list[i][3] = dose_string
                     self.points_tab.table.cellWidget(i, 3).setText(dose_string)
-                    doserate = self.nm_doserate_map[y, x]
+                    try:
+                        doserate = self.nm_doserate_map[y, x]
+                    except IndexError:
+                        doserate = 0
                     if doserate > 0:
-                        dose_string = f'{doserate:.2f}'
+                        if doserate > 0.001:
+                            dose_string = f'{doserate:.2f}'
+                        else:
+                            dose_string = f'{doserate:.2g}'
                     else:
                         dose_string = '0'
                     self.points_tab.table_list[i][4] = dose_string
@@ -509,14 +527,20 @@ class MainWindow(QMainWindow):
                     self.wVisual.btns_annotate.button(
                         ANNOTATION_OPTIONS.index(self.gui.current_tab)).setChecked(True)
                 if self.gui.current_tab == 'Areas':
-                    self.wVisual.btns_overlay.button(1).setChecked(True)
-                    self.areas_tab.update_occ_map()
+                    if self.wVisual.overlay_text() == 'None':
+                        self.wVisual.btns_overlay.button(1).setChecked(True)
+                        self.areas_tab.update_occ_map()
+                        self.wVisual.overlay_selections_changed()
                 elif self.gui.current_tab == 'Walls':
-                    self.wVisual.btns_overlay.button(0).setChecked(True)
+                    if 'Occ' in self.wVisual.overlay_text():
+                        self.wVisual.btns_overlay.button(0).setChecked(True)
+                        self.wVisual.overlay_selections_changed()
                     self.gui.rectify = self.walls_tab.rectify.isChecked()
                 elif ('source' in self.gui.current_tab
                       or 'point' in self.gui.current_tab):
-                    self.wVisual.btns_overlay.button(0).setChecked(True)
+                    if 'Occ' in self.wVisual.overlay_text():
+                        self.wVisual.btns_overlay.button(0).setChecked(True)
+                        self.wVisual.overlay_selections_changed()
                     self.tabs.currentWidget().update_source_annotations()
                 self.blockSignals(False)
 
@@ -540,10 +564,12 @@ class MainWindow(QMainWindow):
         """Reset all data and GUI."""
         h, w = self.gui.panel_height, self.gui.panel_width
         self.gui = GuiData()
+        self.blockSignals(True)
+        self.wCalculate.btns_floor.button(1).setChecked(True)
+        self.blockSignals(False)
         self.gui.panel_height = h
         self.gui.panel_width = w
         self.occ_map = np.zeros(2)
-        self.ct_dose_map = np.zeros(2)
         for widget in [
                 self.scale_tab,
                 self.areas_tab,
@@ -553,10 +579,11 @@ class MainWindow(QMainWindow):
                 self.OTsources_tab,
                 self.points_tab
                 ]:
-            widget.table.setRowCount(1)
-            widget.add_cell_widgets(0)
-            widget.table_list = [copy.deepcopy(self.areas_tab.empty_row)]
-        self.wFloorDisplay.canvas.floor_draw()
+            widget.reset_table()
+        self.gui.image_path == ''
+        self.image = np.zeros(2)
+        self.reset_dose()
+        self.update_image()
 
     def open_project(self, path=None):
         """Load image and tables from folder."""
@@ -733,6 +760,9 @@ class MainWindow(QMainWindow):
         act_settings.setToolTip('Open the user settings manager')
         act_settings.triggered.connect(self.run_settings)
 
+        act_clear_all = QAction('Clear all', self)
+        act_clear_all.triggered.connect(self.reset_all)
+
         act_quit = QAction('&Quit', self)
         act_quit.setShortcut('Ctrl+Q')
         act_quit.triggered.connect(self.exit_app)
@@ -753,7 +783,8 @@ class MainWindow(QMainWindow):
         # fill menus
         mFile = QMenu('&File', self)
         mFile.addActions([act_load_floor_img, act_load_project, act_save_project,
-                          act_save_project_as, act_load_projectIDL, act_quit])
+                          act_save_project_as, act_load_projectIDL, act_clear_all,
+                          act_quit])
         menu_bar.addMenu(mFile)
         mSett = QMenu('&Settings', self)
         mSett.addAction(act_settings)
@@ -1317,30 +1348,6 @@ class FloorCanvas(FigureCanvasQTAgg):
                 pass
         self.draw_idle()
 
-    '''
-    def CT_marker(self, rotation):
-        """Add marker formed as a CT footprint rotated as stated."""
-        verts = np.array([
-           (0.45, 0.15), (0.45, -0.15), (0.15, -0.15), (0.15, -1.0),
-           (-0.15, -1.0), (-0.15, -0.15), (-0.45, -0.15), (-0.45, 0.15),
-           (0.45, 0.15)
-        ])
-        codes = (
-            [mplPath.MOVETO]
-            + [mplPath.LINETO]*(len(verts) - 2)
-            + [mplPath.CLOSEPOLY]
-            )
-        marker = mplPath(verts, codes)
-
-        correction_factor = 1.
-        if rotation != 0:
-            marker = marker.transformed(Affine2D().rotate_deg(-rotation))
-            bbox = marker.get_extents().get_points()
-            correction_factor = np.max(np.abs(bbox))
-
-        return (marker, correction_factor)
-    '''
-
     def set_CT_marker_properties(
             self, index=None, marker=None, highlight=False, hover=False):
         """Set CT marker properties of ax.lines[index].
@@ -1367,7 +1374,7 @@ class FloorCanvas(FigureCanvasQTAgg):
         gid = marker.get_gid()
         gid_split = gid.split('_')
         row = int(gid_split[1])
-        rotation = self.main.CTsources_tab.table_list[row][5]
+        rotation = self.main.CTsources_tab.table_list[row][3]
         if rotation != 0:
             _, correction_factor = mini_methods.CT_marker(rotation)
             size = size * correction_factor
@@ -1432,9 +1439,9 @@ class FloorCanvas(FigureCanvasQTAgg):
                     )
             elif prefix == 'CT':
                 text = text + (
-                    f'kV source: {table_list[row][3]}\n'
-                    f'kV correction: {table_list[row][-3]}\n'
-                    f'mAs pr patient: {table_list[row][-2]}\n'
+                    f'kV source: {table_list[row][4]}\n'
+                    f'kV correction: {table_list[row][-2]}\n'
+                    f'mAs pr patient: {table_list[row][-3]}\n'
                     f'# per day: {table_list[row][-1]}'
                     )
             elif prefix == 'OT':
@@ -1829,12 +1836,43 @@ class InfoToolBar(QWidget):
                     dose_ot = 0
                 dose_sum = dose_nm + dose_ct + dose_ot
 
-                self.lbl_dose_total.setText(f'Total dose = {dose_sum:.3f} mSv')
-                self.lbl_dose_nm.setText(f'NM dose = {dose_nm:.3f} mSv')
-                self.lbl_doserate_nm.setText(
-                    f'NM doserate = {doserate_nm:.3f} ' + '\u03bc' + 'Sv/h')
-                self.lbl_dose_ct.setText(f'CT dose = {dose_ct:.3f} mSv')
-                self.lbl_dose_ot.setText(f'Other dose = {dose_ot:.3f} mSv')
+                if dose_sum > 0:
+                    if dose_sum > 0.001:
+                        self.lbl_dose_total.setText(f'Total dose = {dose_sum:.3f} mSv')
+                    else:
+                        self.lbl_dose_total.setText(f'Total dose = {dose_sum:.2g} mSv')
+                else:
+                    self.lbl_dose_total.setText('Total dose = - mSv')
+                if dose_nm > 0:
+                    if dose_nm > 0.001:
+                        self.lbl_dose_nm.setText(f'NM dose = {dose_nm:.3f} mSv')
+                    else:
+                        self.lbl_dose_nm.setText(f'NM dose = {dose_nm:.2g} mSv')
+                else:
+                    self.lbl_dose_nm.setText('NM dose = - mSv')
+                if doserate_nm > 0:
+                    if doserate_nm > 0.001:
+                        self.lbl_doserate_nm.setText(
+                            f'NM doserate = {doserate_nm:.3f} ' + '\u03bc' + 'Sv/h')
+                    else:
+                        self.lbl_doserate_nm.setText(
+                            f'NM doserate = {doserate_nm:.2g} ' + '\u03bc' + 'Sv/h')
+                else:
+                    self.lbl_doserate_nm.setText('NM doserate = - ' + '\u03bc' + 'Sv/h')
+                if dose_ct > 0:
+                    if dose_ct > 0.001:
+                        self.lbl_dose_ct.setText(f'CT dose = {dose_ct:.3f} mSv')
+                    else:
+                        self.lbl_dose_ct.setText(f'CT dose = {dose_ct:.2g} mSv')
+                else:
+                    self.lbl_dose_ct.setText('CT dose = - mSv')
+                if dose_ot > 0:
+                    if dose_ot > 0.001:
+                        self.lbl_dose_ot.setText(f'Other dose = {dose_ot:.3f} mSv')
+                    else:
+                        self.lbl_dose_ot.setText(f'Other dose = {dose_ot:.2g} mSv')
+                else:
+                    self.lbl_dose_ot.setText('Other dose = - mSv')
         else:
             self.lbl_occ.setText('Occupancy factor =')
             self.lbl_dose_total.setText('Total dose = - mSv')
@@ -2127,7 +2165,7 @@ class CalculateWidget(QWidget):
         self.gb_floor.setLayout(vlo_gb)
         self.btns_floor.button(1).setChecked(True)
 
-        self.working_days = QSpinBox(minimum=1, maximum=1000,
+        self.working_days = QSpinBox(minimum=1, maximum=100000,
                                      value=self.main.general_values.working_days)
         self.working_days.valueChanged.connect(self.working_days_edited)
         hlo_working_days = QHBoxLayout()

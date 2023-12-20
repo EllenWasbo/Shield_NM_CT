@@ -41,7 +41,7 @@ MARKER_STYLE = {
                markeredgecolor='k'),
     'OT': dict(marker='D', color='yellow', markerfacecolor='yellow',
                markeredgecolor='k'),
-    'point': dict(marker='o', color='blue', markerfacecolor='blue',
+    'point': dict(marker='x', color='blue', markerfacecolor='blue',
                   markeredgecolor='blue'),
     }
 
@@ -58,9 +58,9 @@ CONFIG_FNAMES = {
         'saved_as': 'object_list',
         'default': shield_constants_functions.read_yaml(fname='materials')
         },
-    'ct_doserates': {
+    'ct_models': {
         'saved_as': 'object_list',
-        'default': shield_constants_functions.read_yaml(fname='ct_doserates')
+        'default': shield_constants_functions.read_yaml(fname='ct_models')
         },
     'shield_data': {
         'saved_as': 'object_list',

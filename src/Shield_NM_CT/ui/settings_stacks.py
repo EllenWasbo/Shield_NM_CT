@@ -14,7 +14,7 @@ from PyQt5.QtCore import Qt, QItemSelectionModel, QFile
 from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QTabWidget,
-    QGroupBox, QToolBar,
+    QGroupBox, QToolBar, QLineEdit,
     QLabel, QPushButton, QButtonGroup, QRadioButton, QAction, QCheckBox,
     QComboBox, QDoubleSpinBox, QInputDialog, QColorDialog, QTableWidget,
     QTableWidgetItem, QMessageBox
@@ -28,7 +28,6 @@ from Shield_NM_CT.config import config_classes as cfc
 from Shield_NM_CT.config import config_func as cff
 from Shield_NM_CT.ui.settings_reusables import StackWidget
 from Shield_NM_CT.ui import reusable_widgets as uir
-from Shield_NM_CT.ui.ui_dialogs import EditCTdosemapDialog
 from Shield_NM_CT.ui import messageboxes
 from Shield_NM_CT.config.Shield_NM_CT_constants import ENV_ICON_PATH
 from Shield_NM_CT.scripts.mini_methods_format import valid_template_name
@@ -131,17 +130,15 @@ class IsotopeWidget(StackWidget):
 class CTmapCanvas(FigureCanvasQTAgg):
     """Canvas for drawing the floor and overlays."""
 
-    def __init__(self, parent, table_number=0):
+    def __init__(self, parent):
         self.fig = Figure(figsize=(7, 7))
         self.ax = self.fig.add_subplot(111)
         self.fig.subplots_adjust(0., 0., 1., 1.)
         FigureCanvasQTAgg.__init__(self, self.fig)
         self.parent = parent
-        self.table_number = table_number
         self.overlay = None
 
-        fname = 'sag' if table_number == 1 else 'cor'
-        stream = QFile(f':/icons/{fname}.png')
+        stream = QFile(f':/icons/cor.png')
         if stream.open(QFile.ReadOnly):
             data = stream.readAll()
             stream.close()
@@ -149,30 +146,16 @@ class CTmapCanvas(FigureCanvasQTAgg):
 
         self.mpl_connect('motion_notify_event', self.on_move)
 
-    def update_values(self):
-        """Update values according to parent.current_template."""
-        if self.parent.current_template.tables:
-            values = self.parent.current_template.tables[self.table_number]
-            for i, text in enumerate(self.ax.texts):
-                try:
-                    text.set_text(f'{values[i]:.4f}')
-                except IndexError:
-                    break
-        else:
-            for text in self.ax.texts:
-                text.set_text('')
-        self.draw_idle()
-
-    def calculate_overlay(self):
-        """Update overlay data."""
-        plane = 'cor' if self.table_number == 0 else 'sag'
-        overlay, _ = generate_CT_doseratemap(
-                self.parent.current_template, plane=plane,
-                resolution=0.1)
-        self.overlay = overlay.T
-
     def update_overlay(self):
         """Refresh overlay shown in image."""
+        self.overlay = generate_CT_doseratemap(
+            self.parent.current_template,
+            map_shape=self.background.shape[0:2],
+            source_xy=(500, 600), resolution=1./200, all_floors=False)
+        self.scatter_factors.set(
+            alpha=0.3, clim=(0., np.max(self.overlay)))
+        self.scatter_factors.set_data(self.overlay)
+
         try:
             for coll in self.contours.collections:
                 try:
@@ -181,31 +164,39 @@ class CTmapCanvas(FigureCanvasQTAgg):
                     pass
         except AttributeError:
             pass
-        extent = [200, 1300, 815, 200]
-        self.calculate_overlay()
-        self.contours = self.ax.contour(self.overlay, 10, extent=extent, cmap='hot')
-        self.ax.clabel(self.contours, self.contours.levels)
+        try:
+            for txt in self.ax.texts:
+                try:
+                    txt.remove()
+                except ValueError:
+                    pass
+        except AttributeError:
+            pass
+        levels = self.parent.current_template.scatter_factor_front * np.array([0.25, 1])
+        levels = np.append(self.parent.current_template.scatter_factor_gantry, levels)
+        manual_locations = [(300, 600), (500, 800), (500, 1000)]
+        self.contours = self.ax.contour(self.overlay, levels, colors='black',
+                                        linestyles=[':', '--', '-'])
+        self.ax.clabel(self.contours, self.contours.levels, manual=manual_locations)
+
+        self.draw_idle()
 
     def on_move(self, event):
         """When mouse cursor is moving in the canvas."""
         val = '-'
         postxt = 'z = -m, lat = -m, distance = -m'
         if event.inaxes and len(event.inaxes.get_images()) > 0:
-            zpos = (event.xdata - 600)/200  # corrected for center, 200pix/meter
-            latpos = (event.ydata - 500)/200
+            zpos = (event.ydata - 600)/200  # corrected for center, 200pix/meter
+            latpos = (event.xdata - 500)/200
             postxt = (
-                f'z   = {zpos:.1f}m\n'
-                f'lat = {latpos:.1f}m\n'
-                f'distance = {np.sqrt(zpos**2+latpos**2):.1f}m\n'
+                f'z   = {zpos:.2f}m\n'
+                f'lat = {latpos:.2f}m\n'
+                f'distance = {np.sqrt(zpos**2+latpos**2):.2f}m\n'
                 )
             if self.overlay is not None:
-                jj = round(10*(latpos + 1.5))  # resolution 0.1m/pix, center 1.5,2
-                ii = round(10*(zpos + 2.0))
-                if ii > -1 and jj > -1:
-                    try:
-                        val = f'{self.overlay[jj, ii]:.3f}'
-                    except IndexError:
-                        pass
+                jj = round(event.ydata)
+                ii = round(event.xdata)
+                val = f'{self.overlay[jj, ii]:.3f}'
 
         self.anchored_text.txt.set_text(
             f'{postxt}{val} \u03bc' + f'Gy/{self.parent.current_template.unit_per}')
@@ -213,84 +204,139 @@ class CTmapCanvas(FigureCanvasQTAgg):
 
     def CTmap_draw(self):
         """Draw or update isodose map."""
-        rows = [3, 2, 1] + [0]*12 + [1, 2, 3]
-        cols = [0]*3 + list(range(12)) + [11]*3
         self.image = self.ax.imshow(self.background)
+        self.scatter_factors = self.ax.imshow(
+            0.*self.background, alpha=.3, cmap='hot_r')
         self.ax.autoscale(False)
         self.ax.axis('off')
 
-        for i, val in enumerate(rows):
-            self.ax.text(cols[i]*100 + 200, rows[i]*100 + 200, '',
-                         ha='center', va='center',
-                         fontsize=self.parent.main.gui.annotations_fontsize)
-        self.anchored_text = mpl.offsetbox.AnchoredText('', loc='lower right')
+        val = '-'
+        postxt = 'z = -m, lat = -m, distance = -m'
+        txt = f'{postxt}{val} \u03bc' + f'Gy/{self.parent.empty_template.unit_per}'
+
+        self.anchored_text = mpl.offsetbox.AnchoredText(txt, loc='lower right')
         self.ax.add_artist(self.anchored_text)
         self.draw()
-
-
-class CTmapWidget(QWidget):
-    """Table for CT doseratemap."""
-
-    def __init__(self, parent, table_number=0):
-        super().__init__()
-        self.parent = parent
-        self.table_number = table_number
-        self.canvas = CTmapCanvas(self.parent, table_number=table_number)
-        vlo = QVBoxLayout()
-        self.setLayout(vlo)
-        self.lbl_unit = QLabel('')
-        title = 'sagittal' if self.table_number else 'coronal'
-        vlo.addWidget(uir.LabelItalic(f'CT {title} isodose map'))
-        vlo.addWidget(self.canvas)
 
 
 class CT_doserateWidget(StackWidget):
     """CT doserate settings."""
 
     def __init__(self, main):
-        header = 'CT doserate maps'
+        header = 'CT scatter model'
         subtxt = ''
         super().__init__(main, header, subtxt,
-                         temp_list=True, temp_alias='CT doserate map')
-        self.fname = 'ct_doserates'
-        self.empty_template = cfc.CT_doserates()
+                         temp_list=True, temp_alias='CT scatter model')
+        self.fname = 'ct_models'
+        self.empty_template = cfc.CT_model()
 
-        self.tabs = QTabWidget()
-        self.cor_tab = CTmapWidget(self, table_number=0)
-        self.sag_tab = CTmapWidget(self, table_number=1)
-        self.tabs.addTab(self.cor_tab, "Coronal (same floor)")
-        self.tabs.addTab(self.sag_tab, "Sagital (floor above/below)")
+        self.canvas = CTmapCanvas(self)
 
-        btn_edit = QPushButton('Edit selected template...')
-        btn_edit.clicked.connect(self.run_edit)
-        self.wid_temp_list.vlo.addWidget(btn_edit)
+        self.scatter_factor_rear = QDoubleSpinBox(decimals=4, singleStep=0.01)
+        self.scatter_factor_gantry = QDoubleSpinBox(decimals=4, singleStep=0.01)
+        self.scatter_factor_front = QDoubleSpinBox(decimals=4, singleStep=0.01)
+        self.rear_stop_angle = QDoubleSpinBox(
+            minimum=0, maximum=80, decimals=0)
+        self.front_stop_angle = QDoubleSpinBox(
+            minimum=-80, maximum=0, decimals=0)
+        self.unit_per = QLineEdit()
+        self.angle_flatten_rear = QDoubleSpinBox(
+            minimum=0, maximum=90, decimals=0)
+        self.angle_flatten_front = QDoubleSpinBox(
+            minimum=-90, maximum=0, decimals=0)
+        self.flatten_power = QDoubleSpinBox(decimals=1, singleStep=0.1, minimum=0.,
+                                            maximum=100.)
 
-        self.hlo.addWidget(self.tabs)
+        self.scatter_factor_rear.editingFinished.connect(self.parameter_changed)
+        self.scatter_factor_gantry.editingFinished.connect(self.parameter_changed)
+        self.scatter_factor_front.editingFinished.connect(self.parameter_changed)
+        self.rear_stop_angle.editingFinished.connect(self.parameter_changed)
+        self.front_stop_angle.editingFinished.connect(self.parameter_changed)
+        self.unit_per.editingFinished.connect(lambda: self.flag_edit(True))
+        self.angle_flatten_rear.editingFinished.connect(self.parameter_changed)
+        self.angle_flatten_front.editingFinished.connect(self.parameter_changed)
+        self.flatten_power.editingFinished.connect(self.parameter_changed)
+
+        vlo_parameters = QVBoxLayout()
+        vlo_parameters.addWidget(uir.LabelHeader(
+            'Scatter factors', 4))
+        flo = QFormLayout()
+        vlo_parameters.addLayout(flo)
+        flo.addRow(QLabel('at 1m rear'), self.scatter_factor_rear)
+        flo.addRow(QLabel('at 1m front'), self.scatter_factor_front)
+        flo.addRow(QLabel('at 1m shielded by gantry'), self.scatter_factor_gantry)
+        flo.addRow(QLabel('Unit = \u03bc' + 'Gy/'), self.unit_per)
+        vlo_parameters.addWidget(QLabel('Angle range shielded by gantry'))
+        hlo_angles = QHBoxLayout()
+        vlo_parameters.addLayout(hlo_angles)
+        hlo_angles.addWidget(QLabel('   '))
+        hlo_angles.addWidget(self.front_stop_angle)
+        hlo_angles.addWidget(QLabel('\u00b0 (front)'))
+        hlo_angles.addWidget(self.rear_stop_angle)
+        hlo_angles.addWidget(QLabel('\u00b0 (rear)'))
+        vlo_parameters.addWidget(uir.LabelItalic(
+            'Based on <a href="https://pubmed.ncbi.nlm.nih.gov/22327169/">'
+            'Wallace et al 2012</a>'))
+
+        vlo_parameters.addWidget(uir.LabelHeader('Flatten front/rear', 4))
+        vlo_parameters.addWidget(uir.LabelItalic(
+            'Use scatter factors above, but draw values at angles<br>'
+            'indicated below closer to the center line'))
+        hlo_flatten_rear = QHBoxLayout()
+        vlo_parameters.addLayout(hlo_flatten_rear)
+        hlo_flatten_rear.addWidget(QLabel('Flatten rear values for angles >'))
+        hlo_flatten_rear.addWidget(self.angle_flatten_rear)
+        hlo_flatten_rear.addWidget(QLabel('\u00b0'))
+
+        hlo_flatten_front = QHBoxLayout()
+        vlo_parameters.addLayout(hlo_flatten_front)
+        hlo_flatten_front.addWidget(QLabel('Flatten front values for angles <'))
+        hlo_flatten_front.addWidget(self.angle_flatten_front)
+        hlo_flatten_front.addWidget(QLabel('\u00b0'))
+
+        hlo_flatten_power = QHBoxLayout()
+        vlo_parameters.addLayout(hlo_flatten_power)
+        hlo_flatten_power.addWidget(QLabel('Flatten power:'))
+        hlo_flatten_power.addWidget(self.flatten_power)
+        hlo_flatten_power.addStretch()
+
+        self.hlo.addLayout(vlo_parameters)
+        self.hlo.addWidget(self.canvas)
+        self.canvas.CTmap_draw()
 
         self.vlo.addWidget(uir.HLine())
         self.vlo.addWidget(self.status_label)
 
+    def get_current_template(self):
+        """Set self.current_template to current values changed by user input."""
+        self.current_template.scatter_factor_rear = self.scatter_factor_rear.value()
+        self.current_template.scatter_factor_gantry = self.scatter_factor_gantry.value()
+        self.current_template.scatter_factor_front = self.scatter_factor_front.value()
+        self.current_template.rear_stop_angle = self.rear_stop_angle.value()
+        self.current_template.front_stop_angle = self.front_stop_angle.value()
+        self.current_template.unit_per = self.unit_per.text()
+        self.current_template.angle_flatten_front = self.angle_flatten_front.value()
+        self.current_template.angle_flatten_rear = self.angle_flatten_rear.value()
+        self.current_template.flatten_power = self.flatten_power.value()
+
+    def parameter_changed(self):
+        """Paramater to set scatter factors changed. Update map."""
+        self.flag_edit(True)
+        self.get_current_template()
+        self.canvas.update_overlay()
+
     def update_data(self):
         """Refresh GUI after selecting template."""
-        self.cor_tab.canvas.update_values()
-        self.sag_tab.canvas.update_values()
-        self.cor_tab.canvas.update_overlay()
-        self.sag_tab.canvas.update_overlay()
-
-    def delete(self):
-        """Delete selected template."""
-        #TODO sure? delete
-        pass
-
-    def run_edit(self):
-        """Run edit dialog. Same as when add."""
-        dlg = EditCTdosemapDialog(initial_template=self.current_template)
-        res = dlg.exec()
-        if res:
-            set_template = dlg.template
-            if set_template:
-                self.current_template = dlg.template
-                self.flag_edit(True)
+        self.scatter_factor_rear.setValue(self.current_template.scatter_factor_rear)
+        self.scatter_factor_gantry.setValue(self.current_template.scatter_factor_gantry)
+        self.scatter_factor_front.setValue(self.current_template.scatter_factor_front)
+        self.rear_stop_angle.setValue(self.current_template.rear_stop_angle)
+        self.front_stop_angle.setValue(self.current_template.front_stop_angle)
+        self.unit_per.setText(self.current_template.unit_per)
+        self.angle_flatten_front.setValue(self.current_template.angle_flatten_front)
+        self.angle_flatten_rear.setValue(self.current_template.angle_flatten_rear)
+        self.flatten_power.setValue(self.current_template.flatten_power)
+        self.canvas.update_overlay()
 
 
 class MaterialWidget(StackWidget):

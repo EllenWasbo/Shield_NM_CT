@@ -35,8 +35,8 @@ def read_yaml(fname=''):
                     settings.append(cfc.Isotope(**doc))
                 elif fname == 'materials':
                     settings.append(cfc.Material(**doc))
-                elif fname == 'ct_doserates':
-                    settings.append(cfc.CT_doserates(**doc))
+                elif fname == 'ct_models':
+                    settings.append(cfc.CT_model(**doc))
                 elif fname == 'shield_data':
                     settings.append(cfc.ShieldData(**doc))
                 elif fname == 'colormaps':
