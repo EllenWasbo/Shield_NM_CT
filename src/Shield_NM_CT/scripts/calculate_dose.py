@@ -573,6 +573,36 @@ def generate_CT_doseratemap(template,
             template.scatter_factor_rear, dists_sq,
             out=doseratemap,
             where=(sin_angles > sin_rear) & (dists_sq > 0.6**2))
+        # smooth from front/rear to side
+        if template.smooth_angles_rear > 0:
+            sin_smooth = np.sin(
+                (template.rear_stop_angle - template.smooth_angles_rear)
+                * np.pi / 180.)
+            weights = np.divide(
+                sin_angles - sin_smooth, sin_rear - sin_smooth,
+                out=np.zeros(map_shape),
+                where=(sin_angles <= sin_rear) & (sin_angles >= sin_smooth))
+            max_add = template.scatter_factor_rear - template.scatter_factor_gantry
+            adds = np.divide(
+                 max_add * weights, dists_sq,
+                 out=np.zeros(map_shape),
+                 where=(weights > 0) & (dists_sq > 0.6**2))
+            doseratemap = adds + doseratemap
+        if template.smooth_angles_front > 0:
+            sin_smooth = np.sin(
+                (template.front_stop_angle + template.smooth_angles_front)
+                * np.pi / 180.)
+            weights = np.divide(
+                sin_angles - sin_smooth, sin_front - sin_smooth,
+                out=np.zeros(map_shape),
+                where=(sin_angles >= sin_front) & (sin_angles <= sin_smooth))
+            max_add = template.scatter_factor_front - template.scatter_factor_gantry
+            adds = np.divide(
+                 max_add * weights, dists_sq,
+                 out=np.zeros(map_shape),
+                 where=(weights > 0) & (dists_sq > 0.6**2))
+            doseratemap = adds + doseratemap
+
         factors = np.ones(map_shape)
         if template.angle_flatten_front != -90:
             rot_f = template.angle_flatten_front

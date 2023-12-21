@@ -43,7 +43,7 @@ def prepare_debug():
 
 
 if __name__ == '__main__':
-    developer_mode = True
+    developer_mode = False
     if developer_mode:
         prepare_debug()  # type c to continue, developer_mode=False in Shield_NM_CT.py to deactivate debugging
 

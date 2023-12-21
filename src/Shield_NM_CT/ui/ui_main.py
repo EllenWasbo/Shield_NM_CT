@@ -504,6 +504,7 @@ class MainWindow(QMainWindow):
         self.gui.rectify = False
         if hasattr(self.tabs.currentWidget(), 'label'):
             self.gui.current_tab = self.tabs.currentWidget().label
+            self.tabs.currentWidget().select_row_col(0, 0)
             if hasattr(self.wFloorDisplay.canvas, 'ax'):
                 self.wFloorDisplay.canvas.reset_hover_pick()
                 if len(self.wFloorDisplay.canvas.ax.patches) > 0:

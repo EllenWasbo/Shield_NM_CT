@@ -240,6 +240,8 @@ class CT_doserateWidget(StackWidget):
         self.front_stop_angle = QDoubleSpinBox(
             minimum=-80, maximum=0, decimals=0)
         self.unit_per = QLineEdit()
+        self.smooth_angles_rear = QDoubleSpinBox(minimum=0, maximum=80, decimals=0)
+        self.smooth_angles_front = QDoubleSpinBox(minimum=0, maximum=80, decimals=0)
         self.angle_flatten_rear = QDoubleSpinBox(
             minimum=0, maximum=90, decimals=0)
         self.angle_flatten_front = QDoubleSpinBox(
@@ -253,6 +255,8 @@ class CT_doserateWidget(StackWidget):
         self.rear_stop_angle.editingFinished.connect(self.parameter_changed)
         self.front_stop_angle.editingFinished.connect(self.parameter_changed)
         self.unit_per.editingFinished.connect(lambda: self.flag_edit(True))
+        self.smooth_angles_rear.editingFinished.connect(self.parameter_changed)
+        self.smooth_angles_front.editingFinished.connect(self.parameter_changed)
         self.angle_flatten_rear.editingFinished.connect(self.parameter_changed)
         self.angle_flatten_front.editingFinished.connect(self.parameter_changed)
         self.flatten_power.editingFinished.connect(self.parameter_changed)
@@ -260,6 +264,9 @@ class CT_doserateWidget(StackWidget):
         vlo_parameters = QVBoxLayout()
         vlo_parameters.addWidget(uir.LabelHeader(
             'Scatter factors', 4))
+        vlo_parameters.addWidget(uir.LabelItalic(
+            'Based on <a href="https://pubmed.ncbi.nlm.nih.gov/22327169/">'
+            'Wallace et al 2012</a>'))
         flo = QFormLayout()
         vlo_parameters.addLayout(flo)
         flo.addRow(QLabel('at 1m rear'), self.scatter_factor_rear)
@@ -274,9 +281,12 @@ class CT_doserateWidget(StackWidget):
         hlo_angles.addWidget(QLabel('\u00b0 (front)'))
         hlo_angles.addWidget(self.rear_stop_angle)
         hlo_angles.addWidget(QLabel('\u00b0 (rear)'))
-        vlo_parameters.addWidget(uir.LabelItalic(
-            'Based on <a href="https://pubmed.ncbi.nlm.nih.gov/22327169/">'
-            'Wallace et al 2012</a>'))
+
+        vlo_parameters.addWidget(uir.LabelHeader('Fade down scatter factors', 4))
+        flo_smooth = QFormLayout()
+        vlo_parameters.addLayout(flo_smooth)
+        flo_smooth.addRow(QLabel('Rear (\u00b0)'), self.smooth_angles_rear)
+        flo_smooth.addRow(QLabel('Front (\u00b0)'), self.smooth_angles_front)
 
         vlo_parameters.addWidget(uir.LabelHeader('Flatten front/rear', 4))
         vlo_parameters.addWidget(uir.LabelItalic(
@@ -315,6 +325,8 @@ class CT_doserateWidget(StackWidget):
         self.current_template.rear_stop_angle = self.rear_stop_angle.value()
         self.current_template.front_stop_angle = self.front_stop_angle.value()
         self.current_template.unit_per = self.unit_per.text()
+        self.current_template.smooth_angles_rear = self.smooth_angles_rear.value()
+        self.current_template.smooth_angles_front = self.smooth_angles_front.value()
         self.current_template.angle_flatten_front = self.angle_flatten_front.value()
         self.current_template.angle_flatten_rear = self.angle_flatten_rear.value()
         self.current_template.flatten_power = self.flatten_power.value()
@@ -333,6 +345,8 @@ class CT_doserateWidget(StackWidget):
         self.rear_stop_angle.setValue(self.current_template.rear_stop_angle)
         self.front_stop_angle.setValue(self.current_template.front_stop_angle)
         self.unit_per.setText(self.current_template.unit_per)
+        self.smooth_angles_rear.setValue(self.current_template.smooth_angles_rear)
+        self.smooth_angles_front.setValue(self.current_template.smooth_angles_front)
         self.angle_flatten_front.setValue(self.current_template.angle_flatten_front)
         self.angle_flatten_rear.setValue(self.current_template.angle_flatten_rear)
         self.flatten_power.setValue(self.current_template.flatten_power)
@@ -806,8 +820,6 @@ class ShieldDataWidget(StackWidget):
             else:
                 self.current_template.kV_source = self.cbox_sources.currentText()
                 self.current_template.isotope = ''
-            if self.current_template.isotope == self.current_template.kV_source:
-                breakpoint()
             row = self.wid_temp_list.list_temps.currentIndex().row()
             self.current_template.material = self.current_labels[row]
             self.current_template.alpha = self.alpha.value()

@@ -80,6 +80,8 @@ class CT_model:
     scatter_factor_gantry: float = 0.0
     front_stop_angle: int = -20
     scatter_factor_front: float = 0.0
+    smooth_angles_rear: int = 0
+    smooth_angles_front: int = 0
     angle_flatten_rear: int = 90
     angle_flatten_front: int = -90
     flatten_power: float = 1.

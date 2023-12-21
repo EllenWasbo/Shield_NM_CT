@@ -16,14 +16,16 @@ scatter_factor_front: 0.14
 ---
 label: Siemens140
 unit_per: mAs
-scatter_factor_rear: 0.17
-rear_stop_angle: 40
-scatter_factor_gantry: 0.008
-front_stop_angle: -20
-scatter_factor_front: 0.18
+scatter_factor_rear: 0.18
+rear_stop_angle: 55
+scatter_factor_gantry: 0.0082
+front_stop_angle: -50
+scatter_factor_front: 0.195
+smooth_angles_rear: 23.0
+smooth_angles_front: 34.0
 angle_flatten_rear: 75
 angle_flatten_front: -60
-flatten_power: 1.5
+flatten_power: 2.0
 ---
 label: Body flattened
 unit_per: DLP

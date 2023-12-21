@@ -18,7 +18,7 @@ USERNAME = os.getlogin()
 
 # version string used to caluclate increasing number for comparison
 # convention: A.B.C-bD where A,B,C,D is numbers < 100 and always increasing
-VERSION = '2.0.0_b1'
+VERSION = '2.0.0_b2'
 APPDATA = os.path.join(os.environ['APPDATA'], 'Shield_NM_CT')
 TEMPDIR = r'C:\Windows\Temp\Shield_NM_CT'  # alternative to APPDATA if needed
 
@@ -30,8 +30,8 @@ ENV_ICON_PATH = 'SHIELD_NM_CT_ICON_PATH'
 USER_PREFS_FNAME = 'user_preferences.yaml'
 
 ANNOTATION_OPTIONS = ['Scale', 'Areas', 'Walls', 'Wall thickness',
-                   'NM sources', 'CT sources', 'Other sources',
-                   'Calculation points']
+                      'NM sources', 'CT sources', 'Other sources',
+                      'Calculation points']
 # same as Tab label where this should be used to test whether to force display
 
 MARKER_STYLE = {

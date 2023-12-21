@@ -170,8 +170,6 @@ class InputTab(QWidget):
                 self.table_list[self.active_row][2] = text
                 self.update_source_annotations()
                 self.main.reset_dose()
-            else:
-                breakpoint()  #why is tabitem None?
 
     def update_current_source_annotation(self):
         """Update annotations for active source."""
@@ -340,7 +338,7 @@ class InputTab(QWidget):
             for j in range(self.table.columnCount()):
                 w = self.table.cellWidget(i, j)
                 w.row = w.row + row_adjust
-        if 'source' in self.label:
+        if 'source' in self.label or 'point' in self.label:
             self.update_source_annotations(modalities=[self.modality])
         elif self.label == 'Areas':
             self.update_occ_map()
@@ -1190,7 +1188,6 @@ class WallsTab(InputTab):
         added_row = super().add_row()
         if added_row > -1:
             self.add_cell_widgets(added_row)
-            # TODO: if not duplicate_row calling: self.main.update_dose()
         return added_row
 
     def duplicate_row(self):
@@ -1306,7 +1303,6 @@ class NMsourcesTab(InputTab):
         added_row = super().add_row()
         if added_row > -1:
             self.add_cell_widgets(added_row)
-            # TODO: update floor display
         return added_row
 
     def duplicate_row(self):
@@ -1469,7 +1465,6 @@ class CTsourcesTab(InputTab):
         added_row = super().add_row()
         if added_row > -1:
             self.add_cell_widgets(added_row)
-            # TODO: update floor display
         return added_row
 
     def duplicate_row(self):
@@ -1604,7 +1599,6 @@ class OTsourcesTab(InputTab):
         added_row = super().add_row()
         if added_row > -1:
             self.add_cell_widgets(added_row)
-            # TODO: update floor display
         return added_row
 
     def duplicate_row(self):
@@ -1689,7 +1683,6 @@ class PointsTab(InputTab):
         added_row = super().add_row()
         if added_row > -1:
             self.add_cell_widgets(added_row)
-            # TODO: update display
         return added_row
 
     def duplicate_row(self):
