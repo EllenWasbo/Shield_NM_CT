@@ -18,7 +18,7 @@ USERNAME = os.getlogin()
 
 # version string used to caluclate increasing number for comparison
 # convention: A.B.C-bD where A,B,C,D is numbers < 100 and always increasing
-VERSION = '2.0.0_b2'
+VERSION = '2.0.0_b3'
 APPDATA = os.path.join(os.environ['APPDATA'], 'Shield_NM_CT')
 TEMPDIR = r'C:\Windows\Temp\Shield_NM_CT'  # alternative to APPDATA if needed
 

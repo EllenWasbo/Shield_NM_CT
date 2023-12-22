@@ -1252,7 +1252,7 @@ class NMsourcesTab(InputTab):
         self.table.setColumnWidth(4, 13*self.main.gui.char_width)
         self.table.setColumnWidth(5, 13*self.main.gui.char_width)
         self.table.setColumnWidth(6, 13*self.main.gui.char_width)
-        self.table.setColumnWidth(7, 20*self.main.gui.char_width)
+        self.table.setColumnWidth(7, 22*self.main.gui.char_width)
         self.table.setColumnWidth(8, 13*self.main.gui.char_width)
         self.table.setColumnWidth(9, 17*self.main.gui.char_width)
 
@@ -1352,11 +1352,11 @@ class CTsourcesTab(InputTab):
                 '   - Rotation = rotation of CT footprint<br>'
                 '   - kV source = for shielding properties as defined in Settings - '
                 'Shield Data<br>'
-                '   - Doserate map = for non-isotropic scatter factors<br>'
+                '   - Scatter model = see Settings - CT scatter models<br>'
                 '   - correction = factor to adjust dose e.g. if dosemap '
                 'defined for max kVp, correct to adjust for kVp generally lower<br>'
                 '   - workload pr patient = workload unit given by '
-                'doserate map. Average workload pr CT examination<br>'
+                'scatter model. Average workload pr CT examination<br>'
                 '   - # pr workday = average number of procedures pr working day. '
                 'Dose multiplied with number of working days specified.'
                 ),
@@ -1381,12 +1381,12 @@ class CTsourcesTab(InputTab):
         self.table.setColumnWidth(0, 8*self.main.gui.char_width)
         self.table.setColumnWidth(1, 20*self.main.gui.char_width)
         self.table.setColumnWidth(2, 13*self.main.gui.char_width)
-        self.table.setColumnWidth(3, 11*self.main.gui.char_width)
+        self.table.setColumnWidth(3, 12*self.main.gui.char_width)
         self.table.setColumnWidth(4, 17*self.main.gui.char_width)
         self.table.setColumnWidth(5, 18*self.main.gui.char_width)
         self.table.setColumnWidth(6, 18*self.main.gui.char_width)
-        self.table.setColumnWidth(7, 25*self.main.gui.char_width)
-        self.table.setColumnWidth(8, 13*self.main.gui.char_width)
+        self.table.setColumnWidth(7, 26*self.main.gui.char_width)
+        self.table.setColumnWidth(8, 15*self.main.gui.char_width)
         self.table.setColumnWidth(9, 19*self.main.gui.char_width)
 
         self.table.verticalHeader().setVisible(False)
@@ -1534,8 +1534,8 @@ class OTsourcesTab(InputTab):
         self.table.setColumnWidth(1, 20*self.main.gui.char_width)
         self.table.setColumnWidth(2, 13*self.main.gui.char_width)
         self.table.setColumnWidth(3, 20*self.main.gui.char_width)
-        self.table.setColumnWidth(4, 30*self.main.gui.char_width)
-        self.table.setColumnWidth(5, 30*self.main.gui.char_width)
+        self.table.setColumnWidth(4, 33*self.main.gui.char_width)
+        self.table.setColumnWidth(5, 33*self.main.gui.char_width)
 
         self.table.verticalHeader().setVisible(False)
         self.add_cell_widgets(0)
@@ -1654,7 +1654,7 @@ class PointsTab(InputTab):
         self.table.setColumnWidth(0, 10*self.main.gui.char_width)
         self.table.setColumnWidth(1, 20*self.main.gui.char_width)
         self.table.setColumnWidth(2, 13*self.main.gui.char_width)
-        self.table.setColumnWidth(3, 20*self.main.gui.char_width)
+        self.table.setColumnWidth(3, 23*self.main.gui.char_width)
         self.table.setColumnWidth(4, 35*self.main.gui.char_width)
         self.tb.act_duplicate.setVisible(False)
 

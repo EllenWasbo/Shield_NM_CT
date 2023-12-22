@@ -823,6 +823,7 @@ class FloorCanvas(FigureCanvasQTAgg):
         self.info_text = None
         self.handles_visible = False  # True if handles for editing shown
         self.drag_handle = False  # True if handles for editing by drag picked
+        self.recent_pick = False  # True when on_pick, set back to False when on_release
 
         # INFO:
         '''
@@ -1062,7 +1063,13 @@ class FloorCanvas(FigureCanvasQTAgg):
 
             if self.main.gui.current_tab in ['Areas', 'Scale', 'Walls']:
                 if self.main.gui.current_tab in ['Areas', 'Walls']:
-                    self.try_snap(event)
+                    if self.handles_visible and self.drag_handle is False:
+                        if self.recent_pick:
+                            self.recent_pick = False
+                        else:
+                            self.reset_hover_pick()
+                    else:
+                        self.try_snap(event)
                 if self.main.gui.x1 is not None:
                     width = np.abs(self.main.gui.x1 - self.main.gui.x0)
                     height = np.abs(self.main.gui.y1 - self.main.gui.y0)
@@ -1070,7 +1077,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                     width = 0
                     height = 0
 
-                if self.drag_handle is False and (width + height) > 20:
+                if self.drag_handle is False and (width + height) >= 20:
                     if self.main.gui.current_tab == 'Areas':
                         self.area_temp.set_width(width)
                         self.area_temp.set_height(height)
@@ -1121,7 +1128,7 @@ class FloorCanvas(FigureCanvasQTAgg):
             gid = self.current_artist.get_gid()
             if 'handle' in gid:
                 self.drag_handle = True
-            else:
+            elif self.handles_visible is False:
                 prefix = ''
                 if '_' in gid:
                     gid_split = gid.split('_')
@@ -1136,6 +1143,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                     # Create handle_ to drag
                     if prefix == 'areas' and self.main.gui.current_tab == 'Areas':
                         self.current_artist.set_picker(False)
+                        #self.set_picker_areas(False)
                         [xmin, ymin], [xmax, ymax] = (
                             self.current_artist.get_bbox().get_points())
                         xmid = (xmax + xmin) // 2
@@ -1173,6 +1181,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                                 gid=handle[0])
                             )
                         self.handles_visible = True
+                        self.recent_pick = True
                         self.draw_idle()
 
     def on_zoom_changed(self):
@@ -1201,6 +1210,7 @@ class FloorCanvas(FigureCanvasQTAgg):
             self.hovered_artist = None
         self.current_artist = None
         self.handles_visible = False
+        #self.set_picker_areas(True)
         self.drag_handle = False
         self.info_text.set_text('')
         self.info_text.set_visible(False)
@@ -1477,6 +1487,13 @@ class FloorCanvas(FigureCanvasQTAgg):
             if 'handle' not in gid:
                 patch.set_linewidth(linethick)
         self.draw_idle()
+
+    def set_picker_areas(self, set_picker):
+        """Set picker of all areas (patches) to True or False."""
+        if len(self.ax.patches) > 0 and self.main.gui.current_tab == 'Areas':
+            for i, p in enumerate(self.ax.patches):
+                if 'handle' not in p.get_gid():
+                    p.set_picker(set_picker)
 
     def update_area_on_drag(self):
         """Update GUI when area dragged either by handles or not.

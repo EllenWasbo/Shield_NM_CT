@@ -324,7 +324,7 @@ class EditAnnotationsDialog(ShieldDialog):
         self.spin_snap_radius = QSpinBox()
         self.spin_snap_radius.setRange(0, 100)
         self.spin_snap_radius.setValue(snap_radius)
-        fLO.addRow(QLabel('Sap radius'), self.spin_snap_radius)
+        fLO.addRow(QLabel('Snap radius'), self.spin_snap_radius)
 
         buttons = QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         self.buttonBox = QDialogButtonBox(buttons)
