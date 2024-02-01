@@ -1,3 +1,7 @@
+# v2.0.0_b4
+_01 Feb 2024_
+Small fixes:
+- probably different versions of PyQt5 require int values where others accept also float. Fixed to int values.
 
 # v2.0.0_b3
 _22 Dec 2023_

@@ -31,8 +31,6 @@ from matplotlib.backends.backend_qt5agg import (
 from matplotlib.figure import Figure
 import matplotlib.image as mpimg
 from matplotlib import patches
-#from matplotlib.path import Path as mplPath
-#from matplotlib.transforms import Affine2D
 from matplotlib.colors import LinearSegmentedColormap
 
 # Shield_NM_CT block start
@@ -112,7 +110,6 @@ class MainWindow(QMainWindow):
 
         if os.environ[ENV_CONFIG_FOLDER] != '':
             cff.add_user_to_active_users()
-
 
         self.update_settings()
 
@@ -197,7 +194,8 @@ class MainWindow(QMainWindow):
 
         widFull = QWidget()
         widFull.setLayout(bbox)
-        widFull.setFixedSize(2.*self.gui.panel_width, self.gui.panel_height)
+        widFull.setFixedSize(
+            round(2.*self.gui.panel_width), round(self.gui.panel_height))
 
         scroll = QScrollArea()
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
@@ -2015,13 +2013,13 @@ class VisualizationWidget(QWidget):
         self.alpha_overlay_value = QLabel(
             f'{100*self.main.gui.alpha_overlay:.0f} %')
         self.alpha_overlay.setRange(0, 100)
-        self.alpha_overlay.setValue(100*self.main.gui.alpha_overlay)
+        self.alpha_overlay.setValue(round(100*self.main.gui.alpha_overlay))
         self.alpha_overlay.valueChanged.connect(self.update_alpha_overlay)
         self.alpha_image = QSlider(Qt.Horizontal)
         self.alpha_image_value = QLabel(
             f'{100*self.main.gui.alpha_image:.0f} %')
         self.alpha_image.setRange(0, 100)
-        self.alpha_image.setValue(100*self.main.gui.alpha_image)
+        self.alpha_image.setValue(round(100*self.main.gui.alpha_image))
         self.alpha_image.valueChanged.connect(self.update_alpha_image)
         vlo_alpha.addWidget(self.colorbar)
         vlo_alpha.addWidget(uir.LabelItalic('Opacity image'))
