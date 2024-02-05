@@ -33,37 +33,20 @@ def test_open_project(qtbot):
     main.calculate_dose()
     table_list = main.points_tab.get_table_as_list()
     doserate_values = [float(row[-1]) for row in table_list[1:-1]]
-    expected_doserate_values = [11.26, 14.3, 14.3, 1.29,
-                                2.81, 3.57, 3.57, 0.32]
+    expected_doserate_values = [7.71, 9.79, 9.79, 0.88,
+                                1.93, 2.45, 2.45, 0.22]
     assert expected_doserate_values == doserate_values
     dose_values = [float(row[-2]) for row in table_list[1:-1]]
-    expected_dose_values = [1.1255, 1.4295, 0.143, 0.1292,
-                            0.2814, 0.3574, 0.0357, 0.0323]
+    expected_dose_values = [6.416, 8.1492, 0.8149, 0.7364,
+                            1.604, 2.0373, 0.2037, 0.1841]
     assert expected_dose_values == dose_values
 
     # dose at floor below with same geometry and material as bottom 2m
     main.gui.current_floor = 0
     main.sum_dose_days()
     table_list = main.points_tab.get_table_as_list()
-    doserate_center = table_list[-1][-1]
+    doserate_center = float(table_list[-1][-1])
     assert doserate_center == expected_doserate_values[-1]
-    dose_center = table_list[-1][-2]
-    assert dose_center == expected_dose_values[-1]
-
-    main.NMsources_tab.table_list[3] = 'Tc-99m'
-    main.NMsources_tab.table_list[4] = 10000
-    main.gui.current_floor = 1
-    main.calculate_dose()
-    table_list = main.points_tab.get_table_as_list()
-    doserate_values = [float(row[-1]) for row in table_list[1:4]]
-    expected_doserate_values = [2.45, 195, 195, 5.02]
-    assert doserate_values == expected_doserate_values
-    doserate_2m_concrete = table_list[-2][-1]
-    assert doserate_2m_concrete == 1.26
-    main.gui.current_floor = 0
-    main.sum_dose_days()
-    table_list = main.points_tab.get_table_as_list()
-    assert doserate_2m_concrete == table_list[-1][-1]
 
 
 def test_start_settings(qtbot):

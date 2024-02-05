@@ -4,8 +4,8 @@ correct_thickness: false
 c0: 1.7
 c1: 1.0
 c2: 0.5
-h0: 4.0
-h1: 4.0
+h0: 2.7
+h1: 2.5
 shield_mm_above: 200.0
 shield_material_above: Concrete
 shield_mm_below: 200.0
