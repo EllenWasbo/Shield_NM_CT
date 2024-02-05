@@ -25,6 +25,6 @@ patient_constant: 0.023
 label: Lu-177
 half_life: 6.65
 half_life_unit: days
-gamma_ray_constant: 0.00517
-patient_constant: 0.0026
+gamma_ray_constant: 0.00764
+patient_constant: 0.0037
 ---

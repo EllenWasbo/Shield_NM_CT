@@ -170,4 +170,4 @@ def generate_uniq_filepath(input_filepath, max_attempts=1000):
 
 def valid_template_name(text):
     """No slash or space in template names (confuse automation)."""
-    return re.sub('[\s/]+', '_', text)
+    return re.sub(r'[\s/]+', '_', text)

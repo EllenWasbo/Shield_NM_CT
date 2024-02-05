@@ -7,6 +7,7 @@ Constants accessible for shield_nm_ct.
 """
 
 import os
+import sys
 
 # Shield_NM_CT block block start
 import Shield_NM_CT.config.config_classes as cfc
@@ -18,9 +19,13 @@ USERNAME = os.getlogin()
 
 # version string used to caluclate increasing number for comparison
 # convention: A.B.C-bD where A,B,C,D is numbers < 100 and always increasing
-VERSION = '2.0.0_b3'
-APPDATA = os.path.join(os.environ['APPDATA'], 'Shield_NM_CT')
-TEMPDIR = r'C:\Windows\Temp\Shield_NM_CT'  # alternative to APPDATA if needed
+VERSION = '2.0.1'
+if sys.platform.startswith("win"):
+    APPDATA = os.path.join(os.environ['APPDATA'], 'Shield_NM_CT')
+    TEMPDIR = r'C:\Windows\Temp\Shield_NM_CT'  # alternative to APPDATA if needed
+else:  # assume Linux for now
+    APPDATA = os.path.expanduser('~/.config/Shield_NM_CT')
+    TEMPDIR = r'/etc/opt/Shield_NM_CT'
 
 # os.environ variable keys to save global settings in session
 ENV_USER_PREFS_PATH = 'SHIELD_NM_CT_USER_PREFS_PATH'

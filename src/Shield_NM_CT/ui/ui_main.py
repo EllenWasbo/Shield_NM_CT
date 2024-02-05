@@ -232,7 +232,7 @@ class MainWindow(QMainWindow):
         _, _, self.shield_data = cff.load_settings(fname='shield_data')
         _, _, self.general_values = cff.load_settings(fname='general_values')
         _, _, self.colormaps = cff.load_settings(fname='colormaps')
-        self.register_cmaps()
+        self.create_cmap_objects()#self.register_cmaps()
         self.gui.annotations_linethick = self.user_prefs.annotations_linethick
         self.gui.annotations_fontsize = self.user_prefs.annotations_fontsize
         self.gui.picker = self.user_prefs.picker
@@ -251,6 +251,7 @@ class MainWindow(QMainWindow):
         self.wCalculate.chk_correct_thickness_geometry.setChecked(
             self.general_values.correct_thickness)
 
+    '''
     def register_cmaps(self):
         """Register colormaps for use in program."""
         names = ['dose', 'doserate']
@@ -271,6 +272,28 @@ class MainWindow(QMainWindow):
             plt.register_cmap(cmap=map_object)
             extend_value = vals[-1] * 1.05
             self.boundaries.append(vals + [extend_value])
+    '''
+
+    def create_cmap_objects(self):
+        """Create cmap when register_cmap do not work well."""
+        self.boundaries = []
+        self.cmaps = []
+        names = ['dose', 'doserate']
+        for i, colormap in enumerate(self.colormaps):
+            colors = copy.deepcopy(colormap.table)
+            vals = [row[0] for row in colormap.table]
+            minval = min(vals)
+            maxval = max(vals)
+            for colno, row in enumerate(colors):
+                colors[colno][0] = row[0] / maxval
+            if minval > 0:
+                colors.insert(0, [0, '#ffffff'])
+                vals.insert(0, 0)
+            map_object = LinearSegmentedColormap.from_list(
+                names[i], colors, N=len(colors))
+            extend_value = vals[-1] * 1.05
+            self.boundaries.append(vals + [extend_value])
+            self.cmaps.append(map_object)
 
     def load_floor_plan_image(self):
         """Open image and update GUI."""
@@ -1588,7 +1611,7 @@ class FloorCanvas(FigureCanvasQTAgg):
         """Update overlay coupled to dose or doserate."""
         overlay_string = self.main.wVisual.overlay_text()
         overlay = np.zeros(self.main.occ_map.shape)
-        cmap = 'dose'
+        cmap = self.main.cmaps[0]#'dose'
         if overlay_string == 'Dose':
             dose_no = self.main.wVisual.btns_dose.checkedId()
             if dose_no == 0:
@@ -1610,13 +1633,13 @@ class FloorCanvas(FigureCanvasQTAgg):
         else:
             if self.main.nm_doserate_map.shape == self.main.occ_map.shape:
                 overlay = self.main.nm_doserate_map
-                cmap = 'doserate'
+                cmap = self.main.cmaps[1]#'doserate'
         return overlay, cmap
 
     def update_dose_overlay(self):
         """Update GUI with current dose overlay."""
         overlay, cmap = self.get_dose_overlay()
-        if cmap == 'dose':
+        if cmap.name == 'dose':
             maxclim = self.main.colormaps[0].table[-1][0]
             boundaries = self.main.boundaries[0]
         else:
@@ -1912,10 +1935,10 @@ class ColorBar(FigureCanvasQTAgg):
         self.fig.clf()
         ax = self.fig.add_subplot(111)
         try:
-            cmap = self.main.wFloorDisplay.canvas.ax.get_images()[1].cmap.name
+            cmap_name = self.main.wFloorDisplay.canvas.ax.get_images()[1].cmap.name
         except (IndexError, AttributeError):
-            cmap = None
-        if cmap:
+            cmap_name = None
+        if cmap_name:
             overlay_text = self.main.wVisual.overlay_text()[:3]
             boundaries = None
             if overlay_text == 'Occ':
@@ -1939,6 +1962,11 @@ class ColorBar(FigureCanvasQTAgg):
                 ax.axis('off')
 
             if label:
+                if cmap_name in ['dose', 'doserate']:
+                    no = 0 if cmap_name == 'dose' else 1
+                    cmap = self.main.cmaps[no]
+                else:
+                    cmap = cmap_name
                 colorbar = mpl.colorbar.ColorbarBase(
                     ax, cmap=cmap, norm=norm, orientation='horizontal',
                     alpha=self.main.gui.alpha_overlay,

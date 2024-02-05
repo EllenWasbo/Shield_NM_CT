@@ -1,3 +1,9 @@
+# v2.0.1
+_05 Feb, 2024_
+- updated dependencies
+- changed way of setting the cmaps as the register int matplotlib did not work on all systems
+- changed default gamma ray constants for Lu-177. See Wiki.
+
 # v2.0.0_b4
 _01 Feb 2024_
 Small fixes:
