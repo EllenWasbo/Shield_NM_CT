@@ -11,7 +11,7 @@ from pathlib import Path
 
 directory = Path(__file__).parent.parent / 'src'
 
-search_string = "register_cmaps"
+search_string = "np.mean(np.array(LSF_all"
 
 for root, dirs, files in os.walk(directory):
     for file in files:

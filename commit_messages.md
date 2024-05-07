@@ -1,3 +1,8 @@
+# v2.0.2
+_07 May, 2024_
+- upgraded dependency of matplotlib from >=3.5.2 to >=3.7.1 due to issue with incorrect behavior of colorbar
+- fixed error when starting config using older package PyQt5 versions
+
 # v2.0.1
 _05 Feb, 2024_
 - updated dependencies

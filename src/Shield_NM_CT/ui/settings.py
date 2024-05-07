@@ -51,8 +51,8 @@ class SettingsDialog(ShieldDialog):
         self.main = main
 
         self.setWindowTitle('Settings manager')
-        self.width1 = 0.3 * self.main.gui.panel_width
-        self.width2 = 1.2 * self.main.gui.panel_width
+        self.width1 = round(0.3 * self.main.gui.panel_width)
+        self.width2 = round(1.2 * self.main.gui.panel_width)
 
         hlo = QHBoxLayout()
         self.setLayout(hlo)

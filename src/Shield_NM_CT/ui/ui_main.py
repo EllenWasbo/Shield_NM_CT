@@ -1953,7 +1953,7 @@ class ColorBar(FigureCanvasQTAgg):
                 color_values = boundaries[:-1]
             elif overlay_text == 'Max':
                 label = 'max \u03bc' + 'Sv/h'
-                color_values = [row[0] for row in self.main.colormaps[0].table]
+                # color_values = [row[0] for row in self.main.colormaps[0].table]
                 boundaries = self.main.boundaries[1]
                 norm = mpl.colors.BoundaryNorm(boundaries, len(boundaries))
                 color_values = boundaries[:-1]
