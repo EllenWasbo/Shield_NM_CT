@@ -169,7 +169,10 @@ def calculate_dose(main, source_number=None, modality=None):
     else:
         if modality:  # not valid dose (e.g. zero and specific source)
             if modality == 'NM':
-                main.dose_dict['dose_NM']['doserate_max_factors'][source_number] = None
+                try:
+                    main.dose_dict['dose_NM']['doserate_max_factors'][source_number] = None
+                except TypeError:
+                    pass
             for param in [
                     'dist_maps', 'dose_factors', 'transmission_maps']:
                 main.dose_dict[f'dose_{modality}'][param][source_number] = None
@@ -272,6 +275,8 @@ def calculate_wall_affect_sector(shape, source_pos, wall_pos):
     anglemask = theta < (angle_max - angle_min)
 
     if wx0 == wx1:  # vertical wall
+        if sx > wx0:
+            anglemask = theta > (angle_max - angle_min)
         wall_affect_sector = anglemask * np.abs(1/np.cos(theta0))
         if sx > wx0:
             wall_affect_sector[:, wx0:] = 0
@@ -284,7 +289,6 @@ def calculate_wall_affect_sector(shape, source_pos, wall_pos):
         elif sy < wy0:
             wall_affect_sector[:wy0, :] = 0
     else:  # oblique wall
-        wall_affect_sector = anglemask  # geometric correction of thickness ignored
         if wx0 > wx1:
             xmax, ymax = wx0, wy0
             xmin, ymin = wx1, wy1
@@ -294,6 +298,10 @@ def calculate_wall_affect_sector(shape, source_pos, wall_pos):
         slope = (ymax-ymin)/(xmax-xmin)
         y0 = - (slope * xmin - ymin)
         y_at_source = slope*sx + y0
+        x_at_source = (sy - y0) / slope
+        if sx > x_at_source:
+            anglemask = theta > (angle_max - angle_min)
+        wall_affect_sector = anglemask  # geometric correction of thickness ignored
         for xx in range(shape[0]):
             if xx > xmax:
                 if xx > sx:

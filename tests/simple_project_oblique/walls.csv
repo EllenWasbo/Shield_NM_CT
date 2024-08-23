@@ -1,0 +1,3 @@
+;Active;Wall name;x0,y0,x1,y1;Material;Thickness (mm)
+0;True;;97, 596, 599, 100;Lead;2,0
+1;True;;399, 896, 902, 399;Concrete;200,0

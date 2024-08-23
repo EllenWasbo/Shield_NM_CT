@@ -24,7 +24,7 @@ path_tests = Path(__file__).parent
 #qtbot.mouseClick(main.tab_ct.btnRunHom, QtCore.Qt.LeftButton)
 
 
-def test_open_project(qtbot):
+def test_simple_project(qtbot):
     project_path = path_tests / 'simple_project'
     main = MainWindow()
     qtbot.addWidget(main)
@@ -47,6 +47,48 @@ def test_open_project(qtbot):
     table_list = main.points_tab.get_table_as_list()
     doserate_center = float(table_list[-1][-1])
     assert doserate_center == expected_doserate_values[-1]
+
+
+def test_simple_project_90(qtbot):
+    project_path = path_tests / 'simple_project_90'
+    main = MainWindow()
+    qtbot.addWidget(main)
+    main.open_project(path=project_path)
+    # F-18
+    main.calculate_dose()
+    table_list = main.points_tab.get_table_as_list()
+    dose_values = [float(row[-2]) for row in table_list[1:-1]]
+    expected_dose_values = [0.8149, 6.416, 0.7364, 8.1492,
+                            0.2037, 1.604, 0.1841, 2.0373]
+    assert expected_dose_values == dose_values
+
+
+def test_simple_project_oblique_(qtbot):
+    project_path = path_tests / 'simple_project_oblique'
+    main = MainWindow()
+    qtbot.addWidget(main)
+    main.open_project(path=project_path)
+    # F-18
+    main.calculate_dose()
+    table_list = main.points_tab.get_table_as_list()
+    dose_values = [float(row[-2]) for row in table_list[1:-1]]
+    expected_dose_values = [8.1492, 8.1492, 0.8149, 8.1492,
+                            1.604, 1.604, 0.0184, 0.1841]
+    assert expected_dose_values == dose_values
+
+
+def test_simple_project_oblique_90(qtbot):
+    project_path = path_tests / 'simple_project_oblique_90'
+    main = MainWindow()
+    qtbot.addWidget(main)
+    main.open_project(path=project_path)
+    # F-18
+    main.calculate_dose()
+    table_list = main.points_tab.get_table_as_list()
+    dose_values = [float(row[-2]) for row in table_list[1:-1]]
+    expected_dose_values = [8.1492, 8.1492, 0.8149, 8.1492, 
+                            1.604, 0.1841, 0.1604, 0.1841]
+    assert expected_dose_values == dose_values
 
 
 def test_start_settings(qtbot):

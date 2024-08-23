@@ -1,3 +1,7 @@
+# v2.0.3
+_23 Aug, 2024_
+- fixed error with walls at left of source
+
 # v2.0.2
 _07 May, 2024_
 - upgraded dependency of matplotlib from >=3.5.2 to >=3.7.1 due to issue with incorrect behavior of colorbar

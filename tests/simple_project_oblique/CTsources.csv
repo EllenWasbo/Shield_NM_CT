@@ -1,0 +1,2 @@
+;Active;Source name;x,y;Rotation;kV source;Scatter model;Workload unit;Workload pr patient;Correction;# pr workday
+0;True;;;0,0;CT 120 kVp;Body;DLP;4000,0;1,0;0,0

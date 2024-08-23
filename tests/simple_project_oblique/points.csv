@@ -1,0 +1,10 @@
+;Active;Label;x,y;Total dose (mSv);NM max doserate (μSv/h)
+0;True;top;500, 300;0.1473;0.18
+1;True;left;300, 500;0.1473;0.18
+2;True;right;700, 500;0.1473;0.18
+3;True;bottom;500, 700;0.1473;0.18
+4;True;top2m;500, 100;0.0920;0.11
+5;True;left2m;100, 500;0.0920;0.11
+6;True;right2m;900, 500;0.0920;0.11
+7;True;bottom2m;500, 900;0.0920;0.11
+8;True;center;500, 500;0.1836;0.22

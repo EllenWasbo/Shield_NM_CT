@@ -1561,7 +1561,7 @@ class FloorCanvas(FigureCanvasQTAgg):
 
     def update_wall_on_drag(self):
         """Update GUI when picked wall handles dragged."""
-        if self.drag_handle:
+        if self.drag_handle and self.hovered_artist is not None:
             gid_handle = self.current_artist.get_gid()
             half = self.main.gui.handle_size // 2
             xnow = round(self.main.gui.x1)
