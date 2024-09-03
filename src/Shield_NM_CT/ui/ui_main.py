@@ -232,7 +232,7 @@ class MainWindow(QMainWindow):
         _, _, self.shield_data = cff.load_settings(fname='shield_data')
         _, _, self.general_values = cff.load_settings(fname='general_values')
         _, _, self.colormaps = cff.load_settings(fname='colormaps')
-        self.create_cmap_objects()#self.register_cmaps()
+        self.create_cmap_objects()
         self.gui.annotations_linethick = self.user_prefs.annotations_linethick
         self.gui.annotations_fontsize = self.user_prefs.annotations_fontsize
         self.gui.picker = self.user_prefs.picker
@@ -242,6 +242,11 @@ class MainWindow(QMainWindow):
             self.NMsources_tab.update_isotopes()
             self.walls_tab.update_materials()
             self.scale_tab.update_material_lists()
+            self.wFloorDisplay.canvas.update_annotations_fontsize(
+                self.gui.annotations_fontsize)
+            if 'Walls' in self.wVisual.annotate_texts():
+                if self.gui.calibration_factor is not None:
+                    self.walls_tab.update_wall_annotations()
 
     def update_general_values(self):
         """Update gui with current self.general_values."""
@@ -250,29 +255,6 @@ class MainWindow(QMainWindow):
         self.wCalculate.working_days.setValue(self.general_values.working_days)
         self.wCalculate.chk_correct_thickness_geometry.setChecked(
             self.general_values.correct_thickness)
-
-    '''
-    def register_cmaps(self):
-        """Register colormaps for use in program."""
-        names = ['dose', 'doserate']
-        self.boundaries = []
-        for i, colormap in enumerate(self.colormaps):
-            colors = copy.deepcopy(colormap.table)
-            vals = [row[0] for row in colors]
-            minval = min(vals)
-            maxval = max(vals)
-            for colno, row in enumerate(colors):
-                colors[colno][0] = row[0] / maxval
-            if minval > 0:
-                colors.insert(0, [0, '#ffffff'])
-                vals.insert(0, 0)
-            map_object = LinearSegmentedColormap.from_list(
-                names[i], colors, N=len(colors))
-            plt.cm.unregister_cmap(names[i])
-            plt.register_cmap(cmap=map_object)
-            extend_value = vals[-1] * 1.05
-            self.boundaries.append(vals + [extend_value])
-    '''
 
     def create_cmap_objects(self):
         """Create cmap when register_cmap do not work well."""
@@ -299,7 +281,6 @@ class MainWindow(QMainWindow):
         """Open image and update GUI."""
         fname = QFileDialog.getOpenFileName(
             self, 'Load floor plan image', '',
-            #os.path.join(self.user_prefs.default_path, 'floorplan.png'),
             "PNG files (*.png);;All files (*)")
 
         if len(fname[0]) > 0:
@@ -489,6 +470,7 @@ class MainWindow(QMainWindow):
                             self.tabs.currentWidget().add_row()
                         except AttributeError:
                             pass
+            """
             elif event.key() == Qt.Key_Delete:
                 if self.gui.current_tab != 'Scale':
                     if self.tabs.currentWidget().cellwidget_is_text is False:
@@ -496,6 +478,7 @@ class MainWindow(QMainWindow):
                             self.tabs.currentWidget().delete_row()
                         except AttributeError:
                             pass
+            """
 
     def exit_app(self):
         """Exit app."""
@@ -1051,6 +1034,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                                 self.set_CT_marker_properties(
                                     marker=prev_hovered_artist, hover=False)
                         self.draw_idle()
+
                     if self.hovered_artist is None:
                         self.info_text.set_visible(False)
                         self.draw_idle()
@@ -1450,6 +1434,7 @@ class FloorCanvas(FigureCanvasQTAgg):
             proceed = True
         except (TypeError, IndexError, UnboundLocalError):
             proceed = False
+
         if proceed:
             text = (
                 f'{prefix}\n'
@@ -1488,6 +1473,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                     f'dose: {table_list[row][3]}\n'
                     f'max NM doserate: {table_list[row][4]}\n'
                     )
+
             if text != '':
                 self.info_text.set_text(text)
                 self.info_text.set_visible(True)
@@ -1600,7 +1586,7 @@ class FloorCanvas(FigureCanvasQTAgg):
 
     def update_source_on_drag(self):
         """Update GUI when picked point source dragged."""
-        if self.current_artist:
+        if self.current_artist and self.main.gui.x1 is not None:
             self.current_artist.set_data(
                 round(self.main.gui.x1),
                 round(self.main.gui.y1)

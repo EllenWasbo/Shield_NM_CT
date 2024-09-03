@@ -1,3 +1,10 @@
+# v2.0.4
+_03 Sep, 2024_
+- fixed remaining error with walls at left of source (if fully above or below source)
+- removed option to delete rows by delete key (causing trouble if actually deleting text)
+- small fixes to user interface on hover after settings window have been open
+- small bug-fixes
+
 # v2.0.3
 _23 Aug, 2024_
 - fixed error with walls at left of source

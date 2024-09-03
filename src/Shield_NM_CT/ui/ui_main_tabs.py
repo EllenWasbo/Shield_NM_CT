@@ -162,7 +162,7 @@ class InputTab(QWidget):
 
         Assume point - or override this function.
         """
-        if self.active_row > -1:
+        if self.active_row > -1 and self.main.gui.x1 is not None:
             text = (f'{self.main.gui.x1:.0f}, {self.main.gui.y1:.0f}')
             tabitem = self.table.cellWidget(self.active_row, 2)
             if tabitem:
@@ -170,6 +170,12 @@ class InputTab(QWidget):
                 self.table_list[self.active_row][2] = text
                 self.update_source_annotations()
                 self.main.reset_dose()
+        elif self.main.gui.x1 is None:
+            dlg = messageboxes.MessageBoxWithDetails(
+                self, title='Warning',
+                msg='Missing position. Mark position on drawing with mouse.',
+                icon=QMessageBox.Warning)
+            dlg.exec()
 
     def update_current_source_annotation(self):
         """Update annotations for active source."""
@@ -956,7 +962,9 @@ class WallsTab(InputTab):
                 self, self.material_strings, row=row, col=3))
             w = self.table.cellWidget(row, 3)
             if prev_val in self.material_strings:
+                w.blockSignals(True)
                 w.setCurrentText(prev_val)
+                w.blockSignals(False)
             else:
                 if prev_val is not None:
                     warnings.append(

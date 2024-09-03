@@ -48,6 +48,13 @@ def calculate_dose(main, source_number=None, modality=None):
 
     sources = {}
     if proceed:
+        # if first source of given modality added, data not ready, calculate 
+        if source_number is not None and modality is not None:
+            if main.dose_dict[f'dose_{modality}'] is None:
+                source_number = None
+                modality = None
+                # = calculate all, TODO - avoid all, just new
+
         if source_number is not None and modality is not None:
             if modality == 'NM':
                 nonzero_columns = [5, 7, 8, 9]
@@ -151,14 +158,20 @@ def calculate_dose(main, source_number=None, modality=None):
             if modality == 'NM':
                 dd = dose_NM
                 param = 'doserate_max_factors'
+                #try:
                 main.dose_dict['dose_NM'][param][source_number] = dd[param][0]
+                #except TypeError:
+                #    pass
             elif modality == 'CT':
                 dd = dose_CT
             else:
                 dd = dose_OT
             for param in [
                     'dist_maps', 'dose_factors', 'transmission_maps']:
+                #try:
                 main.dose_dict[f'dose_{modality}'][param][source_number] = dd[param][0]
+                #except TypeError:
+                #    pass
 
         else:
             main.dose_dict = {
@@ -175,7 +188,10 @@ def calculate_dose(main, source_number=None, modality=None):
                     pass
             for param in [
                     'dist_maps', 'dose_factors', 'transmission_maps']:
-                main.dose_dict[f'dose_{modality}'][param][source_number] = None
+                try:
+                    main.dose_dict[f'dose_{modality}'][param][source_number] = None
+                except TypeError:
+                    pass
 
     return status, msgs
 
@@ -277,6 +293,8 @@ def calculate_wall_affect_sector(shape, source_pos, wall_pos):
     if wx0 == wx1:  # vertical wall
         if sx > wx0:
             anglemask = theta > (angle_max - angle_min)
+            if np.mean(anglemask) > 0.5:
+                anglemask = np.invert(anglemask)
         wall_affect_sector = anglemask * np.abs(1/np.cos(theta0))
         if sx > wx0:
             wall_affect_sector[:, wx0:] = 0
