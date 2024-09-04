@@ -1023,7 +1023,12 @@ class FloorCanvas(FigureCanvasQTAgg):
                             try:
                                 curr_lw = plt.getp(prev_hovered_artist, 'linewidth')
                                 prev_hovered_artist.set_linewidth(curr_lw - 2)
-                                prev_hovered_artist.set_markeredgewidth(0)
+                                if 'walls' in prev_hovered_artist.get_gid():
+                                    prev_hovered_artist.set_markeredgewidth(0)
+                                else:
+                                    prev_hovered_artist.set_markersize(
+                                        self.main.gui.annotations_markersize[0])
+                                    prev_hovered_artist.set_markeredgewidth(1)
                             except TypeError:
                                 pass
                         else:
@@ -1226,27 +1231,31 @@ class FloorCanvas(FigureCanvasQTAgg):
         """Update parameters when drag finished."""
         active_row = self.main.tabs.currentWidget().active_row
         # update table
+        pos_string = None
         if self.main.gui.current_tab == 'Areas':
-            [x0, y0], [x1, y1] = self.hovered_artist.get_bbox().get_points()
-            pos_string = f'{x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}'
+            if self.hovered_artist is not None:
+                [x0, y0], [x1, y1] = self.hovered_artist.get_bbox().get_points()
+                pos_string = f'{x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}'
         elif self.main.gui.current_tab == 'Walls':
-            [x0, x1], [y0, y1] = self.hovered_artist.get_data()
-            pos_string = f'{x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}'
+            if self.hovered_artist is not None:
+                [x0, x1], [y0, y1] = self.hovered_artist.get_data()
+                pos_string = f'{x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}'
         else:
             pos_string = f'{self.main.gui.x1:.0f}, {self.main.gui.y1:.0f}'
 
-        self.main.tabs.currentWidget().table_list[active_row][2] = pos_string
-        w = self.main.tabs.currentWidget().table.cellWidget(active_row, 2)
-        w.setText(pos_string)
+        if pos_string is not None:
+            self.main.tabs.currentWidget().table_list[active_row][2] = pos_string
+            w = self.main.tabs.currentWidget().table.cellWidget(active_row, 2)
+            w.setText(pos_string)
 
-        if self.main.gui.current_tab == 'Areas':
-            self.main.areas_tab.update_occ_map()
-        elif self.main.gui.current_tab == 'Walls':
-            self.main.walls_tab.update_wall_annotations()
-        elif ('source' in self.main.gui.current_tab
-              or 'point' in self.main.gui.current_tab):
-            self.sourcepos_highlight()
-        self.main.reset_dose()
+            if self.main.gui.current_tab == 'Areas':
+                self.main.areas_tab.update_occ_map()
+            elif self.main.gui.current_tab == 'Walls':
+                self.main.walls_tab.update_wall_annotations()
+            elif ('source' in self.main.gui.current_tab
+                  or 'point' in self.main.gui.current_tab):
+                self.sourcepos_highlight()
+            self.main.reset_dose()
 
         self.reset_hover_pick()
 
@@ -1340,26 +1349,35 @@ class FloorCanvas(FigureCanvasQTAgg):
                 gid_split = line.get_gid().split('_')
                 if gid_split[0] == 'walls':
                     row = int(gid_split[1])
-                    if row == self.main.walls_tab.active_row:
+                    active_wall = False
+                    if self.main.gui.current_tab == 'Walls':
+                        if row == self.main.walls_tab.active_row:
+                            active_wall = True
+                    if active_wall:
                         line.set_markeredgewidth(3)
                     else:
                         line.set_markeredgewidth(0)
             except (ValueError, AttributeError):
                 pass
+
         self.draw_idle()
 
     def sourcepos_highlight(self):
         """Highlight source selected in table."""
-        w = self.main.tabs.currentWidget()
-        for i, p in enumerate(self.ax.lines):
+        widget = self.main.tabs.currentWidget()
+        active_gid = f'{widget.modality}_{widget.active_row}'
+        for i, line in enumerate(self.ax.lines):
             try:
-                temp_gid = f'{w.modality}_{w.active_row}'
-                if p.get_gid() == temp_gid:
-                    p.set_markeredgewidth(3)
-                elif p.get_gid() == 'point_release':
+                gid = line.get_gid()
+                gid_split = line.get_gid().split('_')
+                if gid == active_gid:
+                    line.set_markeredgewidth(3)
+                elif line.get_gid() == 'point_release':
                     pass
+                elif gid_split[0] == 'walls':
+                    line.set_markeredgewidth(0)
                 else:
-                    p.set_markeredgewidth(1)
+                    line.set_markeredgewidth(1)
             except AttributeError:
                 pass
         self.draw_idle()

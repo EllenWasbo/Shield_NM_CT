@@ -1,3 +1,8 @@
+# v2.0.5
+_04 Sep, 2024_
+- fixes to user interface (image annotations on hover)
+- bugfixes to prevent crashes
+
 # v2.0.4
 _03 Sep, 2024_
 - fixed remaining error with walls at left of source (if fully above or below source)

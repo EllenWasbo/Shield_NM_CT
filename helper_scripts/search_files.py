@@ -11,7 +11,7 @@ from pathlib import Path
 
 directory = Path(__file__).parent.parent / 'src'
 
-search_string = "update_wall_annotations"
+search_string = "set_markeredgewidth("
 
 for root, dirs, files in os.walk(directory):
     for file in files:
