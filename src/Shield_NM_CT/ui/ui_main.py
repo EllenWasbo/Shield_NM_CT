@@ -1299,13 +1299,15 @@ class FloorCanvas(FigureCanvasQTAgg):
 
     def add_measured_length(self):
         """Show measured length of line."""
+        lineTxt = 'NB - scale not defined'
         if self.main.gui.scale_length > 0:
-            lineLen = self.main.gui.calibration_factor * np.sqrt(
-                (self.main.gui.x1-self.main.gui.x0)**2 +
-                (self.main.gui.y1-self.main.gui.y0)**2)
-            lineTxt = f'{lineLen:.3f} m'
-        else:
-            lineTxt = 'NB - scale not defined'
+            try:
+                lineLen = self.main.gui.calibration_factor * np.sqrt(
+                    (self.main.gui.x1-self.main.gui.x0)**2 +
+                    (self.main.gui.y1-self.main.gui.y0)**2)
+                lineTxt = f'{lineLen:.3f} m'
+            except TypeError:
+                pass
 
         if hasattr(self, 'measured_text'):
             self.measured_text.set_position(
@@ -2151,7 +2153,7 @@ class VisualizationWidget(QWidget):
     def set_alpha_overlay(self, value):
         """Set opacity (alpha) overlay value and update related parameters/gui."""
         self.main.gui.alpha_overlay = value
-        self.alpha_overlay.setValue(100*value)
+        self.alpha_overlay.setValue(round(100*value))
         self.alpha_overlay_value.setText(f'{100*value:.0f} %')
         self.main.wFloorDisplay.canvas.image_overlay.set(
             alpha=self.main.gui.alpha_overlay)

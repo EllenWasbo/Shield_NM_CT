@@ -1,3 +1,7 @@
+# v2.0.6
+_05 Feb, 2025_
+- bugfixes to prevent crashes related to alpha_overlay and add_measured_length
+
 # v2.0.5
 _04 Sep, 2024_
 - fixes to user interface (image annotations on hover)
