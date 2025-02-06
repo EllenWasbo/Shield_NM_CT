@@ -1,3 +1,7 @@
+# v2.0.7
+_06 Feb, 2025_
+- bugfixes to prevent crashes related to matplotlib set_xdata no longer accept single positions, now packed into list
+
 # v2.0.6
 _05 Feb, 2025_
 - bugfixes to prevent crashes related to alpha_overlay and add_measured_length

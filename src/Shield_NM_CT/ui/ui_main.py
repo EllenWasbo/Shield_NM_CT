@@ -1117,7 +1117,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                     for p in self.ax.lines:
                         if p.get_gid() == 'point_release':
                             create_new = False
-                            p.set_data(event.xdata, event.ydata)
+                            p.set_data([event.xdata], [event.ydata])
                             break
                     if create_new:
                         self.ax.plot(
@@ -1608,8 +1608,8 @@ class FloorCanvas(FigureCanvasQTAgg):
         """Update GUI when picked point source dragged."""
         if self.current_artist and self.main.gui.x1 is not None:
             self.current_artist.set_data(
-                round(self.main.gui.x1),
-                round(self.main.gui.y1)
+                [round(self.main.gui.x1)],
+                [round(self.main.gui.y1)]
                 )
         self.draw_idle()
 

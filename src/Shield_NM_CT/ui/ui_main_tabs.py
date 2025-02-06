@@ -214,7 +214,7 @@ class InputTab(QWidget):
                     mini_methods.CT_marker(self.table_list[self.active_row][3])[0])
                 canvas.set_CT_marker_properties(line_index)
             if x is not None:
-                canvas.ax.lines[line_index].set_data(x, y)
+                canvas.ax.lines[line_index].set_data([x], [y])
             else:
                 canvas.ax.lines[line_index].remove()
             canvas.draw_idle()
@@ -642,21 +642,24 @@ class ScaleTab(InputTab):
 
     def get_pos(self):
         """Get line positions as defined in figure."""
-        if self.main.gui.x1 + self.main.gui.y1 > 0:
-            text = (
-                f'{self.main.gui.x0:.0f}, '
-                f'{self.main.gui.y0:.0f}, '
-                f'{self.main.gui.x1:.0f}, '
-                f'{self.main.gui.y1:.0f}'
-                )
-            tabitem = self.table.cellWidget(0, 0)
-            tabitem.setText(text)
-            self.main.gui.scale_start = (
-                self.main.gui.x0, self.main.gui.y0)
-            self.main.gui.scale_end = (
-                self.main.gui.x1, self.main.gui.y1)
-            if self.main.gui.calibration_factor:
-                self.update_scale()
+        try:
+            if self.main.gui.x1 + self.main.gui.y1 > 0:
+                text = (
+                    f'{self.main.gui.x0:.0f}, '
+                    f'{self.main.gui.y0:.0f}, '
+                    f'{self.main.gui.x1:.0f}, '
+                    f'{self.main.gui.y1:.0f}'
+                    )
+                tabitem = self.table.cellWidget(0, 0)
+                tabitem.setText(text)
+                self.main.gui.scale_start = (
+                    self.main.gui.x0, self.main.gui.y0)
+                self.main.gui.scale_end = (
+                    self.main.gui.x1, self.main.gui.y1)
+                if self.main.gui.calibration_factor:
+                    self.update_scale()
+        except TypeError:
+            pass
 
     def get_scale_from_text(self, text):
         """Get coordinate string for scale.
