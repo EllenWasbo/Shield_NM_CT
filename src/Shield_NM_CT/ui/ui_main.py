@@ -14,7 +14,7 @@ from pathlib import Path
 import shutil
 import webbrowser
 
-from PyQt5.QtGui import QIcon, QKeyEvent
+from PyQt5.QtGui import QIcon, QKeyEvent, QCursor
 from PyQt5.QtCore import Qt, QTimer, QFile
 from PyQt5.QtWidgets import (
     QApplication, qApp, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
@@ -863,39 +863,51 @@ class FloorCanvas(FigureCanvasQTAgg):
 
     def on_press(self, event):
         """When mouse button pressed."""
-        self.mouse_pressed = True
-        if self.main.gui.zoom_active is False:
-            self.main.gui.x0, self.main.gui.y0 = event.xdata, event.ydata
-            self.main.gui.x1, self.main.gui.y1 = event.xdata, event.ydata
+        if event.button.name == 'LEFT':
+            self.mouse_pressed = True
+            if self.main.gui.zoom_active is False:
+                self.main.gui.x0, self.main.gui.y0 = event.xdata, event.ydata
+                self.main.gui.x1, self.main.gui.y1 = event.xdata, event.ydata
 
-            if self.main.gui.current_tab == 'Areas':
-                self.area_temp = patches.Rectangle(
-                    (0, 0), 1, 1, edgecolor='k', linestyle='--',
-                    linewidth=2., fill=False, gid='area_temp')
-                if len(self.ax.patches) > 0:
-                    for i, p in enumerate(self.ax.patches):
-                        if p.get_gid() == 'area_temp':
-                            self.ax.patches[i].remove()
-                self.ax.add_patch(self.area_temp)
-                self.draw_idle()
-            elif self.main.gui.current_tab in ['Scale', 'Walls']:
-                if len(self.ax.lines) > 0:
-                    for i, p in enumerate(self.ax.lines):
-                        if p.get_gid() == 'line_temp':
-                            self.ax.lines[i].remove()
-                if self.handles_visible is False:
-                    if self.main.gui.rectify:
-                        diff_x = abs(self.main.gui.x0 - self.main.gui.x1)
-                        diff_y = abs(self.main.gui.y0 - self.main.gui.y1)
-                        if diff_x > diff_y:  # keep y0
-                            self.main.gui.y1 = self.main.gui.y0
-                        else:  # keep x0
-                            self.main.gui.x1 = self.main.gui.x0
-                    self.ax.plot([self.main.gui.x0, self.main.gui.x1],
-                                 [self.main.gui.y0, self.main.gui.y1],
-                                 'k--', linewidth=2., gid='line_temp')
-            else:
-                pass
+                if self.main.gui.current_tab == 'Areas':
+                    self.area_temp = patches.Rectangle(
+                        (0, 0), 1, 1, edgecolor='k', linestyle='--',
+                        linewidth=2., fill=False, gid='area_temp')
+                    if len(self.ax.patches) > 0:
+                        for i, p in enumerate(self.ax.patches):
+                            if p.get_gid() == 'area_temp':
+                                self.ax.patches[i].remove()
+                    self.ax.add_patch(self.area_temp)
+                    self.draw_idle()
+                elif self.main.gui.current_tab in ['Scale', 'Walls']:
+                    if len(self.ax.lines) > 0:
+                        for i, p in enumerate(self.ax.lines):
+                            if p.get_gid() == 'line_temp':
+                                self.ax.lines[i].remove()
+                    if self.handles_visible is False:
+                        if self.main.gui.rectify:
+                            diff_x = abs(self.main.gui.x0 - self.main.gui.x1)
+                            diff_y = abs(self.main.gui.y0 - self.main.gui.y1)
+                            if diff_x > diff_y:  # keep y0
+                                self.main.gui.y1 = self.main.gui.y0
+                            else:  # keep x0
+                                self.main.gui.x1 = self.main.gui.x0
+                        self.ax.plot([self.main.gui.x0, self.main.gui.x1],
+                                     [self.main.gui.y0, self.main.gui.y1],
+                                     'k--', linewidth=2., gid='line_temp')
+                else:
+                    pass
+        elif event.button.name == 'RIGHT':
+            if self.main.gui.current_tab in ['Areas', 'Scale', 'Walls']:
+                self.popMenu = QMenu(self)
+                self.popMenu.addAction(
+                    QAction(QIcon(""), "Edit coordinates (prepare handles)",
+                            self, triggered=self.prepare_drag))
+                self.popMenu.addAction(
+                    QAction(QIcon(""), "Editing finished (remove handles)",
+                            self, triggered=self.reset_hover_pick))
+                cursor = QCursor()
+                self.popMenu.popup(cursor.pos())
 
     def try_snap(self, event):
         """Try to snap to hovered area or wall while editing/drawing new wall/area."""
@@ -1131,8 +1143,66 @@ class FloorCanvas(FigureCanvasQTAgg):
 
             self.draw_idle()
 
+    def prepare_drag(self):
+        if self.handles_visible is False:
+            gid = self.current_artist.get_gid()
+            prefix = ''
+            if '_' in gid:
+                gid_split = gid.split('_')
+                gid = gid_split[1]
+                prefix = gid_split[0]
+            try:
+                row = int(gid)
+            except ValueError:
+                row = None
+            if row is not None:
+                self.main.tabs.currentWidget().select_row_col(row, 1)
+                # Create handle_ to drag
+                if prefix == 'areas' and self.main.gui.current_tab == 'Areas':
+                    self.current_artist.set_picker(False)
+                    #self.set_picker_areas(False)
+                    [xmin, ymin], [xmax, ymax] = (
+                        self.current_artist.get_bbox().get_points())
+                    xmid = (xmax + xmin) // 2
+                    ymid = (ymax + ymin) // 2
+                    half = self.main.gui.handle_size // 2
+                    handles = [  # gid, pos
+                        ('handle_left', (xmin-half, ymid-half)),
+                        ('handle_top', (xmid-half, ymin-half)),
+                        ('handle_right', (xmax-half, ymid-half)),
+                        ('handle_bottom', (xmid-half, ymax-half))
+                         ]
+                elif prefix == 'walls' and self.main.gui.current_tab == 'Walls':
+                    self.current_artist.set_picker(False)
+                    self.current_artist.set_markeredgewidth(0)
+                    xs, ys = self.current_artist.get_data()
+                    half = self.main.gui.handle_size // 2
+                    handles = [  # gid, pos
+                        ('handle_start', (xs[0]-half, ys[0]-half)),
+                        ('handle_end', (xs[1]-half, ys[1]-half))
+                        ]
+                elif hasattr(self.main.tabs.currentWidget(), 'modality'):
+                    if prefix == self.main.tabs.currentWidget().modality:
+                        self.sourcepos_highlight()
+                    handles = []
+                else:
+                    handles = []
+
+                for handle in handles:
+                    self.ax.add_patch(
+                        patches.Rectangle(
+                            handle[1],
+                            self.main.gui.handle_size, self.main.gui.handle_size,
+                            edgecolor='black', facecolor='white',
+                            linewidth=2, fill=True, picker=True,
+                            gid=handle[0])
+                        )
+                    self.handles_visible = True
+                    self.recent_pick = True
+                    self.draw_idle()
+
     def on_pick(self, event):
-        """When mouse button picking objects."""
+        """When mouse picking objects."""
         if self.current_artist != event.artist:
             self.current_artist = event.artist
             gid = self.current_artist.get_gid()
@@ -1140,16 +1210,19 @@ class FloorCanvas(FigureCanvasQTAgg):
                 self.drag_handle = True
             elif self.handles_visible is False:
                 prefix = ''
+                """
                 if '_' in gid:
                     gid_split = gid.split('_')
                     gid = gid_split[1]
                     prefix = gid_split[0]
+                """
                 try:
                     row = int(gid)
                 except ValueError:
                     row = None
                 if row is not None:
                     self.main.tabs.currentWidget().select_row_col(row, 1)
+                    """
                     # Create handle_ to drag
                     if prefix == 'areas' and self.main.gui.current_tab == 'Areas':
                         self.current_artist.set_picker(False)
@@ -1193,6 +1266,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                         self.handles_visible = True
                         self.recent_pick = True
                         self.draw_idle()
+                    """
 
     def on_zoom_changed(self):
         """Redraw walls if real thickness."""
@@ -1257,7 +1331,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                 self.sourcepos_highlight()
             self.main.reset_dose()
 
-        self.reset_hover_pick()
+        #self.reset_hover_pick()
 
     def add_scale_highlight(self, x0, y0, x1, y1):
         """Highlight floor plan scale.

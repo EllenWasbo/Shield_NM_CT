@@ -1,3 +1,12 @@
+# v2.0.8
+_10 Feb, 2025_
+
+- More user friendly on drawing and adding elements:
+	- For areas and walls: Rightclick hovered element to display drag handles (avoid confusion between editing and adding new element)
+	- When adding new element - the coordinates of the currently drawn temporary object is added.
+- Accepting missing space when editing coordinates
+- Fixed error on oblique walls - under some circumstances the affected sector was claerly miscalculated.
+
 # v2.0.7
 _06 Feb, 2025_
 - bugfixes to prevent crashes related to matplotlib set_xdata no longer accept single positions, now packed into list

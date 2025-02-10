@@ -677,7 +677,7 @@ class ScaleTab(InputTab):
         y1 : int
             as for coords for scale
         """
-        coords = text.split(', ')
+        coords = text.split(',')
         if len(coords) == 4:
             x0 = int(coords[0])
             y0 = int(coords[1])
@@ -878,6 +878,7 @@ class AreasTab(InputTab):
         added_row = super().add_row()
         if added_row > -1:
             self.add_cell_widgets(added_row)
+            self.get_pos()
         return added_row
 
     def duplicate_row(self):
@@ -1199,6 +1200,7 @@ class WallsTab(InputTab):
         added_row = super().add_row()
         if added_row > -1:
             self.add_cell_widgets(added_row)
+            self.get_pos()
         return added_row
 
     def duplicate_row(self):
@@ -1314,6 +1316,7 @@ class NMsourcesTab(InputTab):
         added_row = super().add_row()
         if added_row > -1:
             self.add_cell_widgets(added_row)
+            self.get_pos()
         return added_row
 
     def duplicate_row(self):
@@ -1476,6 +1479,7 @@ class CTsourcesTab(InputTab):
         added_row = super().add_row()
         if added_row > -1:
             self.add_cell_widgets(added_row)
+            self.get_pos()
         return added_row
 
     def duplicate_row(self):
@@ -1610,6 +1614,7 @@ class OTsourcesTab(InputTab):
         added_row = super().add_row()
         if added_row > -1:
             self.add_cell_widgets(added_row)
+            self.get_pos()
         return added_row
 
     def duplicate_row(self):
@@ -1694,6 +1699,7 @@ class PointsTab(InputTab):
         added_row = super().add_row()
         if added_row > -1:
             self.add_cell_widgets(added_row)
+            self.get_pos()
         return added_row
 
     def duplicate_row(self):

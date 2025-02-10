@@ -307,6 +307,7 @@ def calculate_wall_affect_sector(shape, source_pos, wall_pos):
         elif sy < wy0:
             wall_affect_sector[:wy0, :] = 0
     else:  # oblique wall
+        # Express wall as line (left to right)
         if wx0 > wx1:
             xmax, ymax = wx0, wy0
             xmin, ymin = wx1, wy1
@@ -315,13 +316,13 @@ def calculate_wall_affect_sector(shape, source_pos, wall_pos):
             xmin, ymin = wx0, wy0
         slope = (ymax-ymin)/(xmax-xmin)
         y0 = - (slope * xmin - ymin)
-        y_at_source = slope*sx + y0
-        x_at_source = (sy - y0) / slope
-        if sx > x_at_source:
-            anglemask = theta > (angle_max - angle_min)
+        y_at_source = slope*sx + y0  # vertical through source crossing wall
+        x_at_source = (sy - y0) / slope  # horizontal through source crossing wall
+        if np.mean(anglemask) > 0.5:  # make sure affected segment less than half rotation
+            anglemask = np.invert(anglemask)
         wall_affect_sector = anglemask  # geometric correction of thickness ignored
         for xx in range(shape[0]):
-            if xx > xmax:
+            if xx > xmax:  # right of rightmost wall-position
                 if xx > sx:
                     break
                 else:

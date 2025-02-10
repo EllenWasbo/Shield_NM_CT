@@ -32,7 +32,7 @@ def get_pos_from_text(text):
     y : int
         as for coords for Rectangle
     """
-    coords = text.split(', ')
+    coords = text.split(',')
     if len(coords) == 2:
         x = int(coords[0])
         y = int(coords[1])
@@ -59,7 +59,7 @@ def get_wall_from_text(text):
     y1 : int
         as for coords for wall
     """
-    coords = text.split(', ')
+    coords = text.split(',')
     if len(coords) == 4:
         x0 = int(coords[0])
         y0 = int(coords[1])
@@ -90,7 +90,7 @@ def get_area_from_text(text):
     height : int
         as for coords for Rectangle
     """
-    coords = text.split(', ')
+    coords = text.split(',')
     if len(coords) == 4:
         x0 = int(coords[0])
         y0 = int(coords[1])
