@@ -500,7 +500,7 @@ def save_settings(settings, fname='', temp_config_folder=''):
             else:
                 status = try_save(asdict(settings))
 
-        if fname != 'last_modified':
+        if fname != 'last_modified' and temp_config_folder=='':
             update_last_modified(fname)
 
     return (status, path)

@@ -11,7 +11,7 @@ from pathlib import Path
 
 directory = Path(__file__).parent.parent / 'src'
 
-search_string = "set_data("
+search_string = "save_settings"
 
 for root, dirs, files in os.walk(directory):
     for file in files:

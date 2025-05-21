@@ -1,3 +1,11 @@
+# v2.0.9
+_21 May, 2025_
+
+Bugfixes:
+- Accepting more when manually editing positions (accurate use of space after comma no longer important)
+- Avoiding crash when no config folder created yet.
+- Fixed ZeroDivision error when adding new isotopes.
+
 # v2.0.8
 _10 Feb, 2025_
 

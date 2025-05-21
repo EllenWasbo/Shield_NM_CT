@@ -230,7 +230,7 @@ def get_valid_rows(table_list, nonzero_columns=None, n_coordinates=0):
             add = False  # position(s) not given
 
         if add:
-            coords = row[2].split(', ')
+            coords = row[2].split(',')
             if len(coords) == n_coordinates:
                 try:
                     coord_list = [int(coord) for coord in coords]

@@ -116,7 +116,7 @@ class IsotopeWidget(StackWidget):
         """Edited constants."""
         self.flag_edit(True)
         txt = '-'
-        if self.patient_constant.value() > 0:
+        if self.patient_constant.value() > 0 and self.gamma_ray_constant.value() > 0:
             ratio = self.patient_constant.value() / self.gamma_ray_constant.value()
             txt = f'{100*ratio:.1f} %'
         self.patient_percent.setText(txt)

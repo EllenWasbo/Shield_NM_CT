@@ -684,7 +684,7 @@ class MainWindow(QMainWindow):
                             shutil.copyfile(
                                 self.gui.image_path,
                                 os.path.join(path, f'floorplan{image_path.suffix}'))
-                    except FileNotFoundError:
+                    except (FileNotFoundError, shutil.SameFileError):
                         pass  # renamed folder while Shield_NM_CT running?
                 self.scale_tab.export_csv(
                     path=os.path.join(path, 'scale.csv'))
