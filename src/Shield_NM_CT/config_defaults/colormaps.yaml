@@ -1,10 +1,18 @@
 label: Dose
+use: table
 table:
 - [0.25, '#ffee06']
 - [0.5, '#ff9925']
 - [1.0, '#ff0000']
 ---
 label: Max doserate
+use: table
 table:
 - [1, '#ffee06']
 - [7.5, '#ff0000']
+---
+label: Occupancy factors
+use: cmap
+cmap: rainbow
+cmin: 0.0
+cmax: 1.0

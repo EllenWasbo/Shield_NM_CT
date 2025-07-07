@@ -5,6 +5,7 @@
 @author: Ellen Wasbo
 """
 import os
+import re
 import copy
 import numpy as np
 from time import time
@@ -13,11 +14,11 @@ from io import BytesIO
 from PyQt5.QtCore import Qt, QItemSelectionModel, QFile
 from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QTabWidget,
-    QGroupBox, QToolBar, QLineEdit,
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
+    QStackedWidget, QGroupBox, QToolBar, QLineEdit,
     QLabel, QPushButton, QButtonGroup, QRadioButton, QAction, QCheckBox,
     QComboBox, QDoubleSpinBox, QInputDialog, QColorDialog, QTableWidget,
-    QTableWidgetItem, QMessageBox
+    QDialogButtonBox, QMessageBox
     )
 import matplotlib as mpl
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
@@ -32,16 +33,17 @@ from Shield_NM_CT.ui import messageboxes
 from Shield_NM_CT.config.Shield_NM_CT_constants import ENV_ICON_PATH
 from Shield_NM_CT.scripts.mini_methods_format import valid_template_name
 from Shield_NM_CT.scripts.calculate_dose import generate_CT_doseratemap
+from Shield_NM_CT.ui.ui_dialogs import ShieldDialog
 # Shield_NM_CT block end
 
 
 class IsotopeWidget(StackWidget):
     """Isotope settings."""
 
-    def __init__(self, main):
+    def __init__(self, settings_dialog):
         header = 'Isotopes'
         subtxt = ''
-        super().__init__(main, header, subtxt,
+        super().__init__(settings_dialog, header, subtxt,
                          temp_list=True, temp_alias='isotope')
         self.fname = 'isotopes'
         self.empty_template = cfc.Isotope()
@@ -122,9 +124,38 @@ class IsotopeWidget(StackWidget):
         self.patient_percent.setText(txt)
 
     def delete(self):
-        """After verifying at will."""
-        #TODO, not possible if used in shield data
-        pass
+        """Delete isotope and related shield data."""
+        if len(self.templates) == 1:
+            msg = 'Cannot delete last isotope.'
+            QMessageBox.warning(self, 'Failed deleting isotope', msg)
+        else:
+            sel = self.current_template.label
+            _, _, shield_data = cff.load_settings(fname='shield_data')
+            in_shield = [temp.isotope for temp in shield_data]
+
+            proceed = True
+            if sel in in_shield:
+                proceed = messageboxes.proceed_question(
+                    self, 'Delete isotope and related shield data?')
+            if proceed:
+                idxs_used_current = [
+                    i for i, val in enumerate(in_shield) if val==sel]
+                if len(idxs_used_current) > 0:
+                    idxs_used_current.reverse()
+                    for idx in idxs_used_current:
+                        shield_data.pop(idx)
+                    _, path = cff.save_settings(
+                        shield_data, fname='shield_data')
+
+                    widget_shield_data = getattr(
+                        self.settings_dialog, 'widget_shield_data')
+                    widget_shield_data.update_from_yaml()
+                    widget_shield_data.refresh_templist()
+
+                idx = self.wid_temp_list.list_temps.currentIndex().row()
+                self.templates.pop(idx)
+                self.save()
+                self.refresh_templist(selected_id=0)
 
 
 class CTmapCanvas(FigureCanvasQTAgg):
@@ -138,7 +169,7 @@ class CTmapCanvas(FigureCanvasQTAgg):
         self.parent = parent
         self.overlay = None
 
-        stream = QFile(f':/icons/cor.png')
+        stream = QFile(':/icons/cor.png')
         if stream.open(QFile.ReadOnly):
             data = stream.readAll()
             stream.close()
@@ -222,10 +253,10 @@ class CTmapCanvas(FigureCanvasQTAgg):
 class CT_doserateWidget(StackWidget):
     """CT doserate settings."""
 
-    def __init__(self, main):
+    def __init__(self, settings_dialog):
         header = 'CT scatter model'
         subtxt = ''
-        super().__init__(main, header, subtxt,
+        super().__init__(settings_dialog, header, subtxt,
                          temp_list=True, temp_alias='CT scatter model')
         self.fname = 'ct_models'
         self.empty_template = cfc.CT_model()
@@ -356,10 +387,10 @@ class CT_doserateWidget(StackWidget):
 class MaterialWidget(StackWidget):
     """Material settings."""
 
-    def __init__(self, main):
+    def __init__(self, settings_dialog):
         header = 'Materials'
         subtxt = ''
-        super().__init__(main, header, subtxt,
+        super().__init__(settings_dialog, header, subtxt,
                          temp_list=True, temp_alias='material')
         self.fname = 'materials'
         self.empty_template = cfc.Material()
@@ -421,15 +452,55 @@ class MaterialWidget(StackWidget):
                 f'QLabel{{background-color: {self.current_template.color};}}')
 
     def delete(self):
-        """After verifying at will."""
-        #TODO not possible if used in shield data
-        pass
+        """Delete material and related shield_data."""
+        if len(self.templates) == 1:
+            msg = 'Cannot delete last material.'
+            QMessageBox.warning(self, 'Failed deleting material', msg)
+        else:
+            sel = self.current_template.label
+            _, _, shield_data = cff.load_settings(fname='shield_data')
+            in_shield = [temp.material for temp in shield_data]
+
+            proceed = True
+            if sel in in_shield:
+                proceed = messageboxes.proceed_question(
+                    self, 'Delete material and related shield data?')
+            if proceed:
+                idxs_used_current = [
+                    i for i, val in enumerate(in_shield) if val==sel]
+                if len(idxs_used_current) > 0:
+                    idxs_used_current.reverse()
+                    for idx in idxs_used_current:
+                        shield_data.pop(idx)
+                    _, path = cff.save_settings(
+                        shield_data, fname='shield_data')
+
+                    widget_shield_data = getattr(
+                        self.settings_dialog, 'widget_shield_data')
+                    widget_shield_data.update_from_yaml()
+                    widget_shield_data.refresh_templist()
+
+                idx = self.wid_temp_list.list_temps.currentIndex().row()
+                self.templates.pop(idx)
+                self.save()
+                self.refresh_templist(selected_id=0)
+
+                save_general = False
+                gvls = self.main.general_values
+                if gvls.shield_material_above == sel:
+                    gvls.shield_material_above = self.templates[0].label
+                    save_general = True
+                if gvls.shield_material_below == sel:
+                    gvls.shield_material_below = self.templates[0].label
+                    save_general = True
+                if save_general:
+                    _, path = cff.save_settings(gvls, fname='general_values')
 
 
 class ShieldDataWidget(StackWidget):
     """ShieldData settings."""
 
-    def __init__(self, main):
+    def __init__(self, settings_dialog):
         header = 'Shield Data'
         subtxt = (
             'Combining isotope or kVp with materials to set shield properties.<br>'
@@ -440,7 +511,7 @@ class ShieldDataWidget(StackWidget):
             '<a href="https://nuclearsafety.gc.ca/pubs_catalogue/uploads/radionuclide-information-booklet-2022-eng.pdf">'
             'Radionuclide Information Booklet (2023)</a>.'
             )
-        super().__init__(main, header, subtxt, temp_list=True, temp_alias='material')
+        super().__init__(settings_dialog, header, subtxt, temp_list=True, temp_alias='material')
         self.fname = 'shield_data'
         self.empty_template = cfc.ShieldData()
 
@@ -509,7 +580,8 @@ class ShieldDataWidget(StackWidget):
 
         btn_save = QPushButton('Save')
         btn_save.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}save.png'))
-        btn_save.clicked.connect(self.save_shield_data)
+        btn_save.clicked.connect(
+            lambda: self.save_shield_data(update_before_save=True))
         if self.main.save_blocked:
             btn_save.setEnabled(False)
         btn_delete = QPushButton('Delete')
@@ -559,7 +631,7 @@ class ShieldDataWidget(StackWidget):
             The default is ''.
         """
         # show list of materials with bold font for those defined for current source
-        self.current_labels = [x.label for x in self.main.materials]
+        self.current_labels = [x.label for x in self.materials]
         curr_source_is_isotope = self.btns_source_type.button(0).isChecked()
         curr_source = self.cbox_sources.currentText()
         if curr_source_is_isotope:
@@ -597,7 +669,7 @@ class ShieldDataWidget(StackWidget):
     def fill_list_sources(self):
         """Fill list of sources based on selection of source type."""
         if self.btns_source_type.button(0).isChecked():
-            labels = [isotope.label for isotope in self.main.isotopes]
+            labels = [isotope.label for isotope in self.isotopes]
             self.toolbar_kV_source.setVisible(False)
         else:
             labels = self.main.general_values.kV_sources
@@ -608,11 +680,31 @@ class ShieldDataWidget(StackWidget):
         self.blockSignals(False)
         self.cbox_sources.setCurrentIndex(0)
 
+    def update_clicked_template(self):
+        """Update data after new template selected (clicked)."""
+        if self.edited:
+            res = messageboxes.QuestionBox(
+                parent=self, title='Save changes?',
+                msg='Save changes before changing template?')
+            if res.exec():
+                self.get_current_template(ignore_material=True)
+                tempno = self.find_index_of_template()
+                self.templates[tempno] = copy.deepcopy(self.current_template)
+                self.save_shield_data(update_before_save=False)
+            else:
+                self.flag_edit(False)
+
+        row = self.wid_temp_list.list_temps.currentIndex().row()
+        self.update_current_template(selected_id=row)
+        self.update_data()
+
     def update_current_template(self, selected_id=0):
-        """Update self.current_template by source and material."""
+        """Update self.current_template from saved by source and material."""
         tempno = self.find_index_of_template(selected_material_id=selected_id)
         if tempno is not None:
             self.current_template = copy.deepcopy(self.templates[tempno])
+        else:
+            self.current_template = copy.deepcopy(self.empty_template)
 
     def update_data(self):
         """Refresh GUI after selecting template."""
@@ -632,11 +724,12 @@ class ShieldDataWidget(StackWidget):
                 parent=self, title='Save changes?',
                 msg='Save changes before changing selections?')
             if res.exec():
-                self.save_shield_data()
+                self.save_shield_data(update_before_save=True)
             else:
                 self.flag_edit(False)
         self.fill_list_sources()
-        self.update_current_template()
+        row = self.wid_temp_list.list_temps.currentIndex().row()
+        self.update_current_template(selected_id=row)
         self.update_data()
 
     def source_changed(self):
@@ -646,7 +739,7 @@ class ShieldDataWidget(StackWidget):
                 parent=self, title='Save changes?',
                 msg='Save changes before changing selections?')
             if res.exec():
-                self.save_shield_data()
+                self.save_shield_data(update_before_save=True)
             else:
                 self.flag_edit(False)
         if hasattr(self, 'current_template'):
@@ -692,7 +785,7 @@ class ShieldDataWidget(StackWidget):
                 ok_save = self.verify_save(
                     'general_values', self.lastload_general_values)
                 if ok_save:
-                    self.main.general_values.kV_source.append(text)
+                    self.main.general_values.kV_sources.append(text)
                     ok_save, path = cff.save_settings(
                         self.main.general_values, fname='general_values')
                     if ok_save:
@@ -701,7 +794,7 @@ class ShieldDataWidget(StackWidget):
                         self.cbox_sources.setCurrentText(text)
                     else:
                         QMessageBox.warning(
-                            self, f'Failed saving new kV source',
+                            self, 'Failed saving new kV source',
                             f'Failed saving to {path}')
 
     def rename_kV_source(self):
@@ -729,18 +822,25 @@ class ShieldDataWidget(StackWidget):
                         row = self.cbox_sources.currentIndex()
                         self.main.general_values.kV_sources[row] = text
                         for temp in self.main.shield_data:
-                            if temp.kV_source == row.text():
+                            if temp.kV_source == current_text:
                                 temp.kV_source = text
-
+                        self.main.renamed_kV_sources[0].append(current_text)
+                        self.main.renamed_kV_sources[1].append(text)
+                        self.blockSignals(True)
+                        self.cbox_sources.clear()
+                        labels = self.main.general_values.kV_sources
+                        self.cbox_sources.addItems(labels)
+                        self.cbox_sources.setCurrentText(text)
+                        self.blockSignals(False)
                         self.save_general_and_shield_data()
-                        self.refresh_templist(selected_label=text)
+                        #self.refresh_templist(selected_label=text)
 
     def delete_kV_source(self):
         """Delete kV_source."""
         ok_save1 = self.verify_save('general_values', self.lastload_general_values)
         ok_save2 = self.verify_save(self.fname, self.lastload)
         if ok_save1 and ok_save2:
-            current_value = self.current_template.kV_source
+            current_value = self.cbox_sources.currentText()
             used = [x.kV_source for x in self.templates]
 
             proceed = True
@@ -755,6 +855,7 @@ class ShieldDataWidget(StackWidget):
                 for idx in idxs_used_current:
                     self.templates.pop(idx)
                 self.save_general_and_shield_data()
+                self.fill_list_sources()
                 self.refresh_templist()
 
     def find_index_of_template(self, selected_material_id=None):
@@ -770,15 +871,20 @@ class ShieldDataWidget(StackWidget):
         index : int
             Index of template in shield_data templates
         """
+        source = self.cbox_sources.currentText()
+        if selected_material_id is None:
+            row = self.wid_temp_list.list_temps.currentIndex().row()
+            material = self.current_labels[row]
+        else:
+            material = self.current_labels[selected_material_id]
         index = None
-        self.get_current_template()
         for i, temp in enumerate(self.templates):
             if self.btns_source_type.button(0).isChecked():
-                match = (temp.isotope == self.current_template.isotope)
+                match = (temp.isotope == source)
             else:
-                match = (temp.kV_source == self.current_template.kV_source)
+                match = (temp.kV_source == source)
             if match:
-                match = (temp.material == self.current_template.material)
+                match = (temp.material == material)
                 if match:
                     index = i
                     break
@@ -787,7 +893,7 @@ class ShieldDataWidget(StackWidget):
     def save_shield_data(self, update_before_save=True):
         """Save shield data."""
         if update_before_save:
-            tempno = self.find_index_of_current_template()
+            tempno = self.find_index_of_template()
             self.get_current_template()
             if tempno is not None:
                 self.templates[tempno] = copy.deepcopy(self.current_template)
@@ -805,12 +911,14 @@ class ShieldDataWidget(StackWidget):
         """Delete shield data."""
         index = self.find_index_of_template()
         if index is not None:
+            self.templates.pop(index)
             self.save_shield_data(update_before_save=False)
+            self.refresh_templist(selected_label=self.current_template.material)
         else:
             self.status_label.setText('Nothing to delete from saved templates.')
 
-    def get_current_template(self):
-        """Get self.current_template where not dynamically set."""
+    def get_current_template(self, ignore_material=False):
+        """Get self.current_template from screen values, possibly changed."""
         if self.cbox_sources.currentText() != '':
             if not hasattr(self, 'current_template'):
                 self.current_template = copy.deepcopy(self.empty_template)
@@ -820,8 +928,9 @@ class ShieldDataWidget(StackWidget):
             else:
                 self.current_template.kV_source = self.cbox_sources.currentText()
                 self.current_template.isotope = ''
-            row = self.wid_temp_list.list_temps.currentIndex().row()
-            self.current_template.material = self.current_labels[row]
+            if not ignore_material:
+                row = self.wid_temp_list.list_temps.currentIndex().row()
+                self.current_template.material = self.current_labels[row]
             self.current_template.alpha = self.alpha.value()
             self.current_template.beta = self.beta.value()
             self.current_template.gamma = self.gamma.value()
@@ -829,15 +938,17 @@ class ShieldDataWidget(StackWidget):
             self.current_template.hvl2 = self.hvl2.value()
             self.current_template.tvl1 = self.tvl1.value()
             self.current_template.tvl2 = self.tvl2.value()
+        else:
+            self.current_template = copy.deepcopy(self.empty_template)
 
 
 class ColormapSettingsWidget(StackWidget):
     """Widget for setting colormaps."""
 
-    def __init__(self, main):
+    def __init__(self, settings_dialog):
         header = 'Colormaps'
         subtxt = 'Configre colors for dose and doserate limits.'
-        super().__init__(main, header, subtxt, temp_list=True, temp_alias='colormap')
+        super().__init__(settings_dialog, header, subtxt, temp_list=True, temp_alias='colormap')
         self.fname = 'colormaps'
         self.empty_template = cfc.ColorMap()
         self.active_row = 0
@@ -845,18 +956,51 @@ class ColormapSettingsWidget(StackWidget):
         self.table_list = []
         self.wid_temp_list.toolbar.setVisible(False)
 
-        self.table = QTableWidget(1, 2)
+        self.gb_use = QGroupBox('Define colors by...')
+        self.gb_use.setFont(uir.FontItalic())
+        self.btns_use = QButtonGroup()
+        self.btns_use.setExclusive(True)
+        btns_hlo = QHBoxLayout()
+        for i, txt in enumerate(['table', 'colormap']):
+            rbtn = QRadioButton(txt)
+            self.btns_use.addButton(rbtn, i)
+            btns_hlo.addWidget(rbtn)
+            rbtn.clicked.connect(self.use_changed)
+        self.gb_use.setLayout(btns_hlo)
+
+        self.stack_use = QStackedWidget()
+        self.widget_table = QWidget()
+        self.widget_colormap = QWidget()
+        self.stack_use.addWidget(self.widget_table)
+        self.stack_use.addWidget(self.widget_colormap)
+
+        self.table = QTableWidget(1, 3)
         self.table.setMinimumHeight(250)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.setHorizontalHeaderLabels(
-            ['For dose(rate) higher than', 'Color'])
+        self.table_headers = [
+            ['For dose higher than', 'Color', 'Color code'],
+            ['For doserate higher than', 'Color', 'Color code'],
+            ['Occupancy factor', 'Color', 'Color code']
+            ]
+        self.table.setHorizontalHeaderLabels(self.table_headers[0])
         self.table.verticalHeader().setVisible(False)
         self.table.setColumnWidth(0, 40*self.main.gui.char_width)
         self.table.setColumnWidth(1, 25*self.main.gui.char_width)
+        self.table.setColumnWidth(2, 25*self.main.gui.char_width)
         self.add_cell_widgets(0)
 
-        table_toolbar = QToolBar()
-        table_toolbar.setOrientation(Qt.Vertical)
+        self.table_toolbar = QToolBar()
+        self.table_toolbar.setOrientation(Qt.Vertical)
+
+        self.colorbar = uir.ColorBar()
+        self.txt_colorbar = QLineEdit('')
+        self.txt_colorbar.editingFinished.connect(self.cmap_changed)
+        self.btn_colorbar = QPushButton('Select...')
+        self.btn_colorbar.clicked.connect(self.select_cmap)
+        self.cmin = QDoubleSpinBox(minimum=0, maximum=10000., decimals=2)
+        self.cmin.valueChanged.connect(lambda: self.flag_edit(True))
+        self.cmax = QDoubleSpinBox(minimum=0, maximum=10000., decimals=2)
+        self.cmax.valueChanged.connect(lambda: self.flag_edit(True))
 
         act_delete = QAction('Delete', self)
         act_delete.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}delete.png'))
@@ -873,7 +1017,18 @@ class ColormapSettingsWidget(StackWidget):
         act_edit.setToolTip('Edit color of selected row')
         act_edit.triggered.connect(self.edit_color_row)
 
-        table_toolbar.addActions([act_delete, act_add, act_edit])
+        act_up = QAction('Move up', self)
+        act_up.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}moveUp.png'))
+        act_up.setToolTip('Move selected row up')
+        act_up.triggered.connect(lambda: self.move_row(direction='up'))
+
+        act_down = QAction('Move down', self)
+        act_down.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}moveDown.png'))
+        act_down.setToolTip('Move selected row down')
+        act_down.triggered.connect(lambda: self.move_row(direction='down'))
+
+        self.table_toolbar.addActions([act_delete, act_add, act_up, act_down,
+                                       act_edit])
 
         btn_save = QPushButton('Save')
         btn_save.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}save.png'))
@@ -886,10 +1041,36 @@ class ColormapSettingsWidget(StackWidget):
         self.vlo_temp = QVBoxLayout()
         self.wid_temp.setLayout(self.vlo_temp)
 
-        hlo = QHBoxLayout()
-        self.vlo_temp.addLayout(hlo)
-        hlo.addWidget(table_toolbar)
-        hlo.addWidget(self.table)
+        self.vlo_temp.addWidget(self.gb_use)
+        self.vlo_temp.addWidget(self.stack_use)
+
+        vlo_tab = QVBoxLayout()
+        hlo_tab = QHBoxLayout()
+        self.widget_table.setLayout(vlo_tab)
+        vlo_tab.addLayout(hlo_tab)
+        hlo_tab.addWidget(self.table_toolbar)
+        hlo_tab.addWidget(self.table)
+        vlo_tab.addWidget(QLabel(
+            'Colormap might mix colors if the separate colors are from very '
+            'different (i.e. red vs green or blue).'))
+
+        vlo_colorbar = QVBoxLayout()
+        self.widget_colormap.setLayout(vlo_colorbar)
+        hlo_colorbar = QHBoxLayout()
+        vlo_colorbar.addLayout(hlo_colorbar)
+        hlo_colorbar.addWidget(self.colorbar)
+        hlo_colorbar.addWidget(self.txt_colorbar)
+        hlo_colorbar.addWidget(self.btn_colorbar)
+        hlo_colorbar.addStretch()
+        hlo_cminmax = QHBoxLayout()
+        vlo_colorbar.addLayout(hlo_cminmax)
+        hlo_cminmax.addWidget(QLabel('Minimum'))
+        hlo_cminmax.addWidget(self.cmin)
+        hlo_cminmax.addSpacing(20)
+        hlo_cminmax.addWidget(QLabel('Maximum'))
+        hlo_cminmax.addWidget(self.cmax)
+        hlo_cminmax.addStretch()
+        vlo_colorbar.addStretch()
 
         self.vlo_temp.addStretch()
         self.vlo_temp.addWidget(btn_save)
@@ -904,6 +1085,8 @@ class ColormapSettingsWidget(StackWidget):
             row=row, col=0, step=0.25, decimals=3))
         self.table.setCellWidget(row, 1, uir.ColorCell(
             self, initial_color=initial_color, row=row, col=1))
+        self.table.setCellWidget(row, 2, uir.TextCell(
+            self, initial_text=initial_color, row=row, col=2))
 
     def delete_row(self):
         """Delete selected row.
@@ -951,6 +1134,18 @@ class ColormapSettingsWidget(StackWidget):
         self.select_row_col(newrow, 1)
         return newrow
 
+    def move_row(self, direction='up'):
+        if self.active_row == -1:
+            msg = 'Select a row to move'
+            QMessageBox.warning(self, 'No row selected', msg)
+        else:
+            row = self.active_row
+            popped = self.table_list.pop(row)
+            new_row = row - 1 if direction == 'up' else row + 1
+            self.table_list.insert(new_row, popped)
+            self.update_table()
+            self.select_row_col(new_row, 0)
+
     def edit_color_row(self):
         """Edit color for active row."""
         color = QColorDialog.getColor()
@@ -959,14 +1154,27 @@ class ColormapSettingsWidget(StackWidget):
             w = self.table.cellWidget(self.active_row, 1)
             w.setStyleSheet(
                 f'QLabel{{background-color: {color.name()};}}')
+            w = self.table.cellWidget(self.active_row, 2)
+            w.setText(color.name())
             self.flag_edit(True)
 
     def cell_changed(self, row, col, decimals=None):
         """Value changed by user input."""
-        value = self.table_list[row][col]
-        if decimals:
-            value = round(value, decimals)
-        self.table_list[row][col] = value
+        w = self.table.cellWidget(self.active_row, col)
+        if col == 0:
+            value = w.value()  # self.table_list[row][col]
+            if decimals:
+                value = round(value, decimals)
+            self.table_list[row][col] = value
+        else:
+            code = w.text()
+            if re.search(r'^#(?:[0-9a-fA-F]{3}){1,2}$', code):
+                w = self.table.cellWidget(self.active_row, 1)
+                w.setStyleSheet(
+                    f'QLabel{{background-color: {code};}}')
+            else:
+                msg = 'Color code is not a valid hex-string (#rrggbb)'
+                QMessageBox.warning(self, 'Color code not valid', msg)
         self.flag_edit(True)
 
     def select_row_col(self, row, col):
@@ -995,26 +1203,148 @@ class ColormapSettingsWidget(StackWidget):
                 w = self.table.cellWidget(i, j)
                 w.row = w.row + row_adjust
 
-    def update_data(self):
-        """Refresh GUI after selecting template."""
-        tempno = self.current_labels.index(self.current_template.label)
-        self.table_list = self.templates[tempno].table
+    def select_cmap(self):
+        dlg = CmapSelectDialog(self)
+        res = dlg.exec()
+        if res:
+            cmap = dlg.get_cmap()
+            self.current_template.cmap = cmap
+            self.txt_colorbar.setText(cmap)
+            self.colorbar.colorbar_draw(cmap=cmap)
+            self.flag_edit(True)
+
+    def cmap_changed(self):
+        try:
+            cmap = self.txt_colorbar.text()
+            self.colorbar.colorbar_draw(cmap=cmap)
+            self.current_template.cmap = cmap
+            self.flag_edit(True)
+        except ValueError:
+            msg = f'{cmap} is not a supported cmap value for matplotlib.'
+            QMessageBox.warning(self, 'Failed setting colormap', msg)
+
+    def use_changed(self):
+        """Use table or cmap changed - or possibly changed."""
+        if self.btns_use.button(0).isChecked():
+            self.current_template.use = 'table'
+            self.stack_use.setCurrentIndex(0)
+        else:
+            self.current_template.use = 'cmap'
+            self.stack_use.setCurrentIndex(1)
+        self.flag_edit(True)
+
+    def update_table(self):
+        """Update after order changed (new self.table_list)."""
         self.table.setRowCount(0)
 
         for i, row in enumerate(self.table_list):
             self.table.insertRow(i)
             self.add_cell_widgets(i, initial_value=row[0], initial_color=row[1])
 
+    def update_data(self):
+        """Refresh GUI after selecting template."""
+        tempno = self.current_labels.index(self.current_template.label)
+        self.table.setHorizontalHeaderLabels(self.table_headers[tempno])
+        self.table_list = self.templates[tempno].table
+        self.update_table()
+        '''
+        self.table.setRowCount(0)
+
+        for i, row in enumerate(self.table_list):
+            self.table.insertRow(i)
+            self.add_cell_widgets(i, initial_value=row[0], initial_color=row[1])
+        '''
+
+        self.txt_colorbar.setText(self.current_template.cmap)
+        self.colorbar.colorbar_draw(cmap=self.current_template.cmap)
+        self.cmin.setValue(self.current_template.cmin)
+        self.cmax.setValue(self.current_template.cmax)
+
+        self.blockSignals(True)
+        if self.current_template.use == 'table':
+            self.btns_use.button(0).setChecked(True)
+        else:
+            self.btns_use.button(1).setChecked(True)
+        self.blockSignals(False)
+        self.use_changed()
+
         self.flag_edit(False)
 
     def save_colormap(self):
         """Save current colormap."""
         tempno = self.current_labels.index(self.current_template.label)
+        self.templates[tempno] = copy.deepcopy(self.current_template)
         self.templates[tempno].table = copy.deepcopy(self.table_list)
         ok_save = self.verify_save(self.fname, self.lastload)
+        if self.current_template.use == 'cmap':
+            cmin = self.cmin.value()
+            cmax = self.cmax.value()
+            if cmax <= cmin:
+                ok_save = False
+                msg = 'Colormap maximum have to be larger than the minimum.'
+                QMessageBox.warning(self, 'Failed saving settings', msg)
+            else:
+                self.templates[tempno].cmin = cmin
+                self.templates[tempno].cmax = cmax
+        else:  # table
+            values = np.array([row[0] for row in self.table_list])
+            orderdiff = np.diff(np.argsort(values))
+            if np.min(orderdiff) < 1 or np.max(orderdiff) > 1:
+                ok_save = False
+                msg = 'Values need to ascending.'
+                QMessageBox.warning(self, 'Failed saving settings', msg)
         if ok_save:
             ok_save, path = cff.save_settings(
                 self.templates, fname=self.fname)
             self.status_label.setText(f'Changes saved to {path}')
             self.flag_edit(False)
             self.lastload = time()
+
+
+class CmapSelectDialog(ShieldDialog):
+    """Dialog to select matplotlib colormap."""
+
+    def __init__(self, current_cmap='rainbow'):
+        super().__init__()
+        self.setWindowTitle('Select colormap')
+        self.setMinimumHeight(300)
+        self.setMinimumWidth(300)
+        vlo = QVBoxLayout()
+        self.setLayout(vlo)
+
+        self.cmaps = ['rainbow', 'viridis', 'YlOrRd', 'OrRd',
+                      'autumn', 'hot', 'Reds']
+        self.list_cmaps = QComboBox()
+        self.list_cmaps.addItems(self.cmaps)
+        self.list_cmaps.setCurrentIndex(0)
+        self.list_cmaps.currentIndexChanged.connect(self.update_preview)
+        self.chk_reverse = QCheckBox('Reverse')
+        self.chk_reverse.clicked.connect(self.update_preview)
+        self.colorbar = uir.ColorBar()
+
+        vlo.addWidget(QLabel('Select colormap:'))
+        vlo.addWidget(self.list_cmaps)
+        vlo.addWidget(self.chk_reverse)
+        vlo.addWidget(self.colorbar)
+        hlo_buttons = QHBoxLayout()
+        vlo.addLayout(hlo_buttons)
+
+        buttons = QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+        self.buttonBox = QDialogButtonBox(buttons)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+        vlo.addWidget(self.buttonBox)
+
+        self.update_preview()
+
+    def update_preview(self):
+        """Sort elements by name or date."""
+        cmap = self.get_cmap()
+        self.colorbar.colorbar_draw(cmap=cmap)
+
+    def get_cmap(self):
+        """Return selected indexes in list."""
+        cmap = self.list_cmaps.currentText()
+        if self.chk_reverse.isChecked():
+            cmap = cmap + '_r'
+        return cmap

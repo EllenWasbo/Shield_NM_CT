@@ -481,11 +481,15 @@ class InputTab(QWidget):
 
             nrows, ncols = df.shape
             if ncols != ncols_expected:
-                pass  # TODO - ask for other separator, decimal, active ignored
+                QMessageBox.warning(
+                    self, 'Import failed',
+                    f'Number of columns in imported table ({ncols}) not as '
+                    f'expected ({ncols_expected}).',)
             else:
                 self.table.setRowCount(0)
                 self.table_list = []
 
+                log = []
                 for row in range(nrows):
                     self.table.insertRow(row)
                     self.table_list.append(copy.deepcopy(self.empty_row))
@@ -502,6 +506,10 @@ class InputTab(QWidget):
                         elif hasattr(w, 'setCurrentText'):
                             val = str(df.iat[row, col])
                             w.setCurrentText(val)
+                            if w.currentText() != val:
+                                log.append(f'Row {row}, Column {col}: '
+                                           f'Value {val} no longer available.')
+                                val = w.currentText()
                         elif hasattr(w, 'setValue'):
                             val = float(df.iat[row, col])
                             w.setValue(val)
@@ -510,6 +518,14 @@ class InputTab(QWidget):
                         self.table_list[row][col - 1] = val
                         w.blockSignals(False)
                 self.select_row_col(0, 0)
+                if log:
+                    dlg = messageboxes.MessageBoxWithDetails(
+                        self, title='Warnings',
+                        msg=f'Found issues for imported file {path}',
+                        info='See details',
+                        icon=QMessageBox.Warning,
+                        details=log)
+                    dlg.exec()
 
 
 class ScaleTab(InputTab):
@@ -602,8 +618,8 @@ class ScaleTab(InputTab):
 
         self.vlo.addStretch()
 
-        self.update_heights()
         self.update_material_lists(first=True)
+        self.update_heights()
 
     def add_cell_widgets(self, row):
         """Add cell widgets to the selected row (new row, default values)."""
@@ -704,7 +720,7 @@ class ScaleTab(InputTab):
             self.main.wFloorDisplay.canvas.add_scale_highlight(
                 x0, y0, x1, y1)
             self.main.CTsources_tab.update_source_annotations()
-            # TODO self.main.update_dose()
+            self.main.reset_dose()
 
     def update_heights(self):
         """Update floor heights."""
@@ -716,36 +732,62 @@ class ScaleTab(InputTab):
         self.h1.setValue(self.main.general_values.h1)
         self.shield_mm_above.setValue(self.main.general_values.shield_mm_above)
         self.shield_mm_below.setValue(self.main.general_values.shield_mm_below)
+        mabove = self.main.general_values.shield_material_above
+        mbelow = self.main.general_values.shield_material_below
+        self.shield_material_above.setCurrentText(mabove)
+        self.shield_material_below.setCurrentText(mbelow)
+        warn = []
+        if self.shield_material_above.currentText() != mabove:
+            self.main.general_values.shield_material_above =\
+                self.material_strings[0]
+            warn.append(f'Floor above material {mabove} no longer available. '
+                        f'Set to {self.material_strings[0]}')
+        if self.shield_material_below.currentText() != mbelow:
+            self.main.general_values.shield_material_below =\
+                self.material_strings[0]
+            warn.append(f'Floor below material {mbelow} no longer available. '
+                        f'Set to {self.material_strings[0]}')
         self.blockSignals(False)
+        if warn:
+            dlg = messageboxes.MessageBoxWithDetails(
+                self, title='Warnings',
+                msg='Found issues for floor materials',
+                info='See details',
+                icon=QMessageBox.Warning,
+                details=warn)
+            dlg.exec()
 
-    def update_material_lists(self, first=False):
+    def update_material_lists(self, first=False, rename_list=None):
         """Update selectable lists."""
         self.material_strings = [x.label for x in self.main.materials]
-        if first:
-            prev_above = self.main.general_values.shield_material_above
-            prev_below = self.main.general_values.shield_material_below
-        else:
-            prev_above = self.shield_material_above.currentText()
-            prev_below = self.shield_material_below.currentText()
         warnings = []
-        self.blockSignals(True)
-        self.shield_material_above.clear()
-        self.shield_material_above.addItems(self.material_strings)
-        if prev_above in self.material_strings:
-            self.shield_material_above.setCurrentText(prev_above)
-        else:
-            self.shield_material_above.setCurrentText(self.material_strings[0])
-            warnings.append(f'Shield material of floor above ({prev_above}) no longer '
-                            'available. Please control selected material.')
-        self.shield_material_below.clear()
-        self.shield_material_below.addItems(self.material_strings)
-        if prev_below in self.material_strings:
-            self.shield_material_below.setCurrentText(prev_below)
-        else:
-            self.shield_material_below.setCurrentText(self.material_strings[0])
-            warnings.append(f'Shield material of floor below ({prev_below}) no longer '
-                            'available. Please control selected material.')
-        self.blockSignals(False)
+        for attr in ['shield_material_above', 'shield_material_below']:
+            cbox = getattr(self, attr)
+            cbox.blockSignals(True)
+            cbox.clear()
+            cbox.addItems(self.material_strings)
+            if first:
+                prev_val = getattr(self.main.general_values, attr)
+            else:
+                prev_val = cbox.currentText()
+            if prev_val in self.material_strings:
+                cbox.setCurrentText(prev_val)
+            else:
+                if rename_list is None:
+                    rename_list = [[], []]
+                if prev_val in rename_list[0]:
+                    idx = rename_list[0].index(prev_val)
+                    prev_val = rename_list[1][idx]
+                    cbox.setCurrentText(prev_val)
+                else:
+                    cbox.setCurrentText(
+                        self.material_strings[0])
+                    warnings.append('Shield material for floor above or below '
+                                    f'({prev_val}) no longer available. '
+                                    'Please control selected material.')
+                    setattr(self.main.general_values, attr,
+                            self.material_strings[0])
+            cbox.blockSignals(False)
         if warnings:
             dlg = messageboxes.MessageBoxWithDetails(
                 self, title='Warnings',
@@ -856,9 +898,11 @@ class AreasTab(InputTab):
             if update_overlay:
                 self.main.wFloorDisplay.canvas.image_overlay.set_data(self.main.occ_map)
         if update_overlay:
-            self.main.wFloorDisplay.canvas.image_overlay.set(
-                cmap='rainbow', alpha=self.main.gui.alpha_overlay, clim=(0., 1.))
-        if update_overlay or update_patches:
+            #self.main.wFloorDisplay.canvas.image_overlay.set(
+            #    cmap='rainbow', alpha=self.main.gui.alpha_overlay, clim=(0., 1.))'
+            self.main.wFloorDisplay.canvas.set_overlay_cmap(
+                cmap_no=2, overlay_array=self.main.occ_map)
+        if update_patches:
             self.main.wFloorDisplay.canvas.draw_idle()
 
     def delete_row(self):
@@ -955,25 +999,29 @@ class WallsTab(InputTab):
             self, initial_value=self.empty_row[4],
             row=row, col=4, max_val=400., step=1.0))
 
-    def update_materials(self):
+    def update_materials(self, rename_list=None):
         """Update ComboBox of all rows when list of materials changed in settings."""
         self.material_strings = [x.label for x in self.main.materials]
         warnings = []
         self.blockSignals(True)
+        if rename_list is None:
+            rename_list = [[], []]
         for row in range(self.table.rowCount()):
             prev_val = self.get_cell_value(row, 3)
-            self.table.setCellWidget(row, 3, uir.CellCombo(
-                self, self.material_strings, row=row, col=3))
-            w = self.table.cellWidget(row, 3)
-            if prev_val in self.material_strings:
-                w.blockSignals(True)
-                w.setCurrentText(prev_val)
-                w.blockSignals(False)
-            else:
+            if prev_val not in self.material_strings or prev_val in rename_list[0]:
                 if prev_val is not None:
-                    warnings.append(
-                        f'Material ({prev_val}) no longer available. '
-                        f'Please control material of walls row number {row}.')
+                    if prev_val in rename_list[0]:
+                        idx = rename_list[0].index(prev_val)
+                        prev_val = rename_list[1][idx]
+                        self.table_list[row][3] == prev_val
+                    else:
+                        warnings.append(
+                            f'Material ({prev_val}) no longer available. '
+                            f'Please control material of walls row number {row}.')
+                        prev_val = None
+            self.table.setCellWidget(row, 3, uir.CellCombo(
+                self, self.material_strings, initial_value=prev_val,
+                row=row, col=3))
         self.blockSignals(False)
         if warnings:
             dlg = messageboxes.MessageBoxWithDetails(
@@ -1292,12 +1340,38 @@ class NMsourcesTab(InputTab):
         self.table.setCellWidget(row, 9, uir.CellSpinBox(
             self, row=row, col=9, max_val=100, step=1, decimals=2))
 
-    def update_isotopes(self):
+    def update_isotopes(self, rename_list=None):
         """Update ComboBox of all rows when list of isotopes changed in settings."""
         self.isotope_strings = [x.label for x in self.main.isotopes]
+        warnings = []
+        self.blockSignals(True)
+        if rename_list is None:
+            rename_list = [[], []]
         for row in range(self.table.rowCount()):
+            prev_val = self.get_cell_value(row, 3)
+            if prev_val not in self.isotope_strings or prev_val in rename_list[0]:
+                if prev_val is not None:
+                    if prev_val in rename_list[0]:
+                        idx = rename_list[0].index(prev_val)
+                        prev_val = rename_list[1][idx]
+                        self.table_list[row][3] == prev_val
+                    else:
+                        warnings.append(
+                            f'Isotope ({prev_val}) no longer available. '
+                            f'Please verify isotope of NM sources row number {row}.')
+                        prev_val = None
             self.table.setCellWidget(row, 3, uir.CellCombo(
-                self, self.isotope_strings, row=row, col=3))
+                self, self.isotope_strings, initial_value=prev_val,
+                row=row, col=3))
+        self.blockSignals(False)
+        if warnings:
+            dlg = messageboxes.MessageBoxWithDetails(
+                self, title='Warnings',
+                msg='Found issues for selected isotopes',
+                info='See details',
+                icon=QMessageBox.Warning,
+                details=warnings)
+            dlg.exec()
 
     def delete_row(self):
         """Delete selected row."""
@@ -1431,28 +1505,47 @@ class CTsourcesTab(InputTab):
             self, initial_value=self.empty_row[-1],
             row=row, col=9, max_val=100, step=1, decimals=1))  # pr workday
 
-    def update_kV_sources(self):
+    def update_kV_sources(self, rename_list_kV_sources=None,
+                          rename_list_ct_models=None):
         """Update ComboBox of all rows when list of kV_sources changed from settings."""
-        self.kV_source_strings = [x.label for x in self.main.general_values.kV_sources]
+        self.kV_source_strings = self.main.general_values.kV_sources
         self.ct_doserate_strings = [x.label for x in self.main.ct_models]
         self.ct_doserate_units = [x.unit_per for x in self.main.ct_models]
         warnings = []
-        #self.blockSignals(True)
+        if rename_list_kV_sources is None:
+            rename_list_kV_sources = [[], []]
+        if rename_list_ct_models is None:
+            rename_list_ct_models = [[], []]
+        self.blockSignals(True)
         for colno in [4, 5]:
             for row in range(self.table.rowCount()):
                 prev_val = self.get_cell_value(row, colno)
-                self.table.setCellWidget(row, colno, uir.CellCombo(
-                    self, self.kV_source_strings, row=row, col=colno))
-                w = self.table.cellWidget(row, colno)
-                if prev_val in self.kV_source_strings:
-                    w.setCurrentText(prev_val)
+                warn = False
+                if colno == 4:
+                    txt = 'kV source'
+                    options = self.kV_source_strings
+                    rename_list = rename_list_kV_sources
                 else:
-                    if prev_val is not None:
-                        txt = 'kV source' if colno == 4 else 'CT doserate map'
-                        warnings.append(
-                            f'{txt} ({prev_val}) no longer available. '
-                            f'Please control {txt} in row number {row}.')
-        #self.blockSignals(False)
+                    txt = 'CT doserate map'
+                    options = self.ct_doserate_strings
+                    rename_list = rename_list_ct_models
+                if prev_val is not None:
+                    if prev_val not in options or prev_val in rename_list[0]:
+                        if prev_val in rename_list[0]:
+                            idx = rename_list[0].index(prev_val)
+                            prev_val = rename_list[1][idx]
+                            self.table_list[row][colno] == prev_val
+                        else:
+                            warn = True
+                if warn:
+                    warnings.append(
+                        f'{txt} ({prev_val}) no longer available. '
+                        f'Please control {txt} in row number {row}.')
+                    prev_val = None
+                self.table.setCellWidget(row, colno, uir.CellCombo(
+                    self, options, initial_value=prev_val,
+                    row=row, col=colno))
+        self.blockSignals(False)
         if warnings:
             dlg = messageboxes.MessageBoxWithDetails(
                 self, title='Warnings',
@@ -1570,23 +1663,29 @@ class OTsourcesTab(InputTab):
             self, initial_value=0, row=row, col=5,
             max_val=100, step=1, decimals=1))  # pr workday
 
-    def update_kV_sources(self):
+    def update_kV_sources(self, rename_list=None):
         """Update ComboBox of all rows when list of kV_sources changed from settings."""
-        self.kV_source_strings = [x.label for x in self.main.general_values.kV_sources]
+        self.kV_source_strings = self.main.general_values.kV_sources
         warnings = []
+        if rename_list is None:
+            rename_list = [[], []]
         self.blockSignals(True)
         for row in range(self.table.rowCount()):
             prev_val = self.get_cell_value(row, 3)
+            if prev_val not in self.kV_source_strings:
+                if prev_val is not None or prev_val in rename_list[0]:
+                    if prev_val in rename_list[0]:
+                        idx = rename_list[0].index(prev_val)
+                        prev_val = rename_list[1][idx]
+                        self.table_list[row][3] == prev_val
+                    else:
+                        warnings.append(
+                            f'kV source ({prev_val}) no longer available. '
+                            f'Please control source in row number {row}.')
+                        prev_val = None
             self.table.setCellWidget(row, 3, uir.CellCombo(
-                self, self.kV_source_strings, row=row, col=3))
-            w = self.table.cellWidget(row, 3)
-            if prev_val in self.kV_source_strings:
-                w.setCurrentText(prev_val)
-            else:
-                if prev_val is not None:
-                    warnings.append(
-                        f'kV source ({prev_val}) no longer available. '
-                        f'Please control source in row number {row}.')
+                self, self.kV_source_strings, initial_value=prev_val,
+                row=row, col=3))
         self.blockSignals(False)
         if warnings:
             dlg = messageboxes.MessageBoxWithDetails(

@@ -7,14 +7,13 @@
 import os
 from time import time
 import copy
-import numpy as np
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIcon, QBrush, QColor
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QToolBar, QLabel, QAction,
-    QListWidget, QListWidgetItem, QInputDialog, QMessageBox, QFileDialog
+    QListWidget, QInputDialog, QMessageBox, QFileDialog
     )
 
 # Shield_NM_CT block start
@@ -30,13 +29,13 @@ from Shield_NM_CT.scripts.mini_methods_format import valid_template_name
 class StackWidget(QWidget):
     """Class for general widget attributes for the stacked widgets."""
 
-    def __init__(self, main=None, header='', subtxt='', temp_alias='template',
-                 temp_list=False, editable=True):
+    def __init__(self, settings_dialog=None, header='', subtxt='',
+                 temp_alias='template', temp_list=False, editable=True):
         """Initiate StackWidget.
 
         Parameters
         ----------
-        main: MainWindow
+        settings_dialog: SettingsDialog
         header : str
             header text
         subtxt : str
@@ -51,7 +50,8 @@ class StackWidget(QWidget):
             False = hide toolbar for save/edit + hide edited
         """
         super().__init__()
-        self.main = main
+        self.main = settings_dialog.main
+        self.settings_dialog = settings_dialog
         self.temp_alias = temp_alias
         self.temp_list = temp_list
         self.edited = False
@@ -84,16 +84,19 @@ class StackWidget(QWidget):
 
     def update_from_yaml(self, initial_template_label=''):
         """Refresh settings from yaml file."""
-        self.lastload = self.main.lastload
+        self.lastload = time()
 
         if hasattr(self, 'fname'):
-            self.templates = getattr(self.main, self.fname)
+            _, _, self.templates = cff.load_settings(fname=self.fname)
             if self.fname == 'shield_data':
-                self.lastload_general_values = self.main.lastload
-                self.fill_list_sources()
+                _, _, self.isotopes = cff.load_settings(fname='isotopes')
+                _, _, self.materials = cff.load_settings(fname='materials')
+                self.lastload_general_values = time()
 
             if self.temp_list:
                 self.refresh_templist(selected_label=initial_template_label)
+                if self.fname == 'shield_data':
+                    self.fill_list_sources()
             else:
                 self.update_data()
 
@@ -218,11 +221,56 @@ class StackWidget(QWidget):
     def rename(self, newlabel):
         """Rename selected template."""
         tempno = self.current_labels.index(self.current_template.label)
+        oldlabel = self.templates[tempno].label
         self.current_template.label = newlabel
         self.templates[tempno].label = newlabel
-        #TODO save more? (related templates see imageQCpy settings_reusables)
-        self.save()
+
+        save_more = False
+        more = None
+        more_fnames = None
+        if self.fname in ['isotopes', 'materials']:
+            # also change name in connected templates
+            save_more = True
+            if self.fname == 'isotopes':
+                more_fnames = ['shield_data']
+                _, path, shield_data = cff.load_settings(fname='shield_data')
+                for data in shield_data:
+                    if data.isotope == oldlabel:
+                        data.isotope = newlabel
+                more = [shield_data]
+                self.main.renamed_isotopes[0].append(oldlabel)
+                self.main.renamed_isotopes[1].append(newlabel)
+            elif self.fname == 'materials':
+                _, path, shield_data = cff.load_settings(fname='shield_data')
+                for data in shield_data:
+                    if data.material == oldlabel:
+                        data.material = newlabel
+                more = [shield_data]
+                more_fnames = ['shield_data']
+                self.main.renamed_materials[0].append(oldlabel)
+                self.main.renamed_materials[1].append(newlabel)
+
+                changed = False
+                _, path, general_values = cff.load_settings(
+                    fname='general_values')
+                if general_values.shield_material_above == oldlabel:
+                    general_values.shield_material_above = newlabel
+                    changed = True
+                if general_values.shield_material_below == oldlabel:
+                    general_values.shield_material_below = newlabel
+                    changed = True
+                if changed:
+                    more.append(general_values)
+                    more_fnames.append('general_values')
+        elif self.fname == 'ct_models':
+            self.main.renamed_ct_models[0].append(oldlabel)
+            self.main.renamed_ct_models[1].append(newlabel)
+
+        self.save(save_more=save_more, more=more, more_fnames=more_fnames)
         self.refresh_templist(selected_label=newlabel)
+        if save_more:
+            wid_shield = getattr(self.settings_dialog, 'widget_shield_data')
+            wid_shield.update_from_yaml()
 
     def verify_save(self, fname, lastload):
         """Verify that save is possible and not in conflict with other users."""
@@ -267,18 +315,11 @@ class StackWidget(QWidget):
                                 ok_save_this, path = cff.save_settings(
                                     more[i], fname=more_fname)
                                 ok_save.append(ok_save_this)
-                        if len(ok_save) > 0:
-                            if all(ok_save):
-                                dlg = messageboxes.MessageBoxWithDetails(
-                                    self, title='Updated related templates',
-                                    msg=('Related templates also updated. '
-                                         'See details to view changes performed'),
-                                    details=log, icon=QMessageBox.Information)
-                                dlg.exec()
 
                     self.status_label.setText(
                         f'Changes saved to {path}')
                     self.flag_edit(False)
+                    self.settings_dialog.reset_dose = True
                     self.lastload = time()
                 else:
                     QMessageBox.warning(

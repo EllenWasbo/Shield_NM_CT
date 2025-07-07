@@ -12,9 +12,13 @@ from PyQt5.QtGui import QIcon, QFont, QKeyEvent
 from PyQt5.QtWidgets import (
     qApp, QWidget, QDialog, QDialogButtonBox, QVBoxLayout, QHBoxLayout, QFrame,
     QToolBar, QAction, QComboBox, QRadioButton, QButtonGroup, QToolButton,
-    QLabel, QPushButton, QListWidget, QLineEdit, QCheckBox, QDoubleSpinBox,
+    QLabel, QPushButton, QLineEdit, QCheckBox, QDoubleSpinBox,
     QProgressDialog, QProgressBar, QStatusBar
     )
+
+import matplotlib
+import matplotlib.figure
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
 # Shield_NM_CT block start
 from Shield_NM_CT.config.Shield_NM_CT_constants import ENV_ICON_PATH
@@ -209,7 +213,7 @@ class ProgressModal(QProgressDialog):
             """
             )
         self.sub_interval = 0  # used to communicate subprosess range within setRange
-
+        self.setAttribute(Qt.WA_DeleteOnClose)
 
 class ToolBarBrowse(QToolBar):
     """Toolbar for reuse with search button."""
@@ -619,12 +623,14 @@ class InputCheckBox(QCheckBox):
 class CellCombo(QComboBox):
     """Checkbox with left margin for InputTab."""
 
-    def __init__(self, parent, strings, row=-1, col=-1):
+    def __init__(self, parent, strings, initial_value=None, row=-1, col=-1):
         super().__init__()
         self.parent = parent
         self.row = row
         self.col = col
         self.addItems(strings)
+        if initial_value is not None:
+            self.setCurrentText(initial_value)
         self.currentIndexChanged.connect(
             lambda: self.parent.cell_changed(self.row, self.col))
 
@@ -665,3 +671,47 @@ class ColorCell(QLabel):
                 pass
             else:
                 super().keyReleaseEvent(event)
+
+
+class ColorBar(FigureCanvasQTAgg):
+    """Canvas for colorbar."""
+
+    def __init__(self, slider_min=None, slider_max=None):
+        self.fig = matplotlib.figure.Figure(figsize=(2, 0.5))
+        self.fig.subplots_adjust(0., 0., 1., 1.)
+        FigureCanvasQTAgg.__init__(self, self.fig)
+        self.slider_min = slider_min
+        self.slider_max = slider_max
+        self.cmap = 'rainbow'
+
+    def colorbar_draw(self, cmap=''):
+        """Draw or update colorbar."""
+        self.fig.clf()
+        ax = self.fig.add_subplot(111)
+        if cmap == '':
+            cmap = self.cmap
+        else:
+            self.cmap = cmap
+        if cmap:
+            try:
+                _ = matplotlib.colorbar.ColorbarBase(
+                    ax, cmap=matplotlib.pyplot.cm.get_cmap(cmap),
+                    orientation='horizontal')
+            except AttributeError:  # from matplotlib v 3.9.0
+                _ = matplotlib.colorbar.ColorbarBase(
+                    ax, cmap=matplotlib.pyplot.get_cmap(cmap),
+                    orientation='horizontal')
+            if all([self.slider_min, self.slider_max]):
+                range_max = self.slider_max.maximum()
+                range_min = self.slider_min.minimum()
+                set_min = self.slider_min.value()
+                set_max = self.slider_max.value()
+                full = range_max - range_min
+                if full > 0:
+                    min_ratio = (set_min - range_min) / full
+                    max_ratio = (set_max - range_min) / full
+                    if max_ratio == min_ratio:
+                        max_ratio = min_ratio + 0.01
+                    self.fig.subplots_adjust(min_ratio, 0., max_ratio, 1.)
+        ax.axis('off')
+        self.draw()

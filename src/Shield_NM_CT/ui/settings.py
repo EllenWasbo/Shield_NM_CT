@@ -49,6 +49,7 @@ class SettingsDialog(ShieldDialog):
         """
         super().__init__()
         self.main = main
+        self.reset_dose = False  # True if changes should force recalculating dose
 
         self.setWindowTitle('Settings manager')
         self.width1 = round(0.3 * self.main.gui.panel_width)
@@ -84,24 +85,24 @@ class SettingsDialog(ShieldDialog):
             self.list_txt_item_widget.append((title, item, this_widget))
 
         add_widget(snake='user_settings', title='Local settings',
-                   widget=UserSettingsWidget(self.main))
+                   widget=UserSettingsWidget(self))
         add_widget(snake='shared_settings', title='Config folder',
-                   widget=SharedSettingsWidget(self.main))
+                   widget=SharedSettingsWidget(self))
         add_widget(parent=self.item_shared_settings, snake='isotopes',
                    title='Isotopes',
-                   widget=settings_stacks.IsotopeWidget(self.main))
+                   widget=settings_stacks.IsotopeWidget(self))
         add_widget(parent=self.item_shared_settings, snake='ct_models',
                    title='CT scatter models',
-                   widget=settings_stacks.CT_doserateWidget(self.main))
+                   widget=settings_stacks.CT_doserateWidget(self))
         add_widget(parent=self.item_shared_settings, snake='materials',
                    title='Materials',
-                   widget=settings_stacks.MaterialWidget(self.main))
+                   widget=settings_stacks.MaterialWidget(self))
         add_widget(parent=self.item_shared_settings, snake='shield_data',
                    title='Shield data',
-                   widget=settings_stacks.ShieldDataWidget(self.main))
+                   widget=settings_stacks.ShieldDataWidget(self))
         add_widget(parent=self.item_shared_settings, snake='colormaps',
                    title='Color settings',
-                   widget=settings_stacks.ColormapSettingsWidget(self.main))
+                   widget=settings_stacks.ColormapSettingsWidget(self))
 
         item, widget = self.get_item_widget_from_txt(initial_view)
         self.tree_settings.setCurrentItem(item)
@@ -181,7 +182,7 @@ class SettingsDialog(ShieldDialog):
 class UserSettingsWidget(StackWidget):
     """Widget holding user settings."""
 
-    def __init__(self, main):
+    def __init__(self, settings_dialog):
         """Initiate."""
         header = 'Local settings'
         subtxt = '''Settings specific for the current user.<br>
@@ -190,7 +191,7 @@ class UserSettingsWidget(StackWidget):
         This config folder will hold all other settings and may
         be shared between users.<br>
         From start this may be an empty folder.'''
-        super().__init__(main, header, subtxt)
+        super().__init__(settings_dialog, header, subtxt)
 
         self.config_folder = QLineEdit()
         self.lbl_user_prefs_path = QLabel()
@@ -315,16 +316,16 @@ class UserSettingsWidget(StackWidget):
 class SharedSettingsWidget(StackWidget):
     """Widget for shared settings."""
 
-    def __init__(self, main):
+    def __init__(self, settings_dialog):
         header = 'Config folder - shared settings'
         subtxt = '''Each of the sub-pages will display different settings
          saved in the config folder (specified in user settings).<br>
         Templates and settings will be saved as .yaml files. <br>
         Several users may link to the same config folder and
          share these settings.'''
-        super().__init__(main, header, subtxt)
-        self.width1 = main.gui.panel_width*0.3
-        self.width2 = main.gui.panel_width*1.7
+        super().__init__(settings_dialog, header, subtxt)
+        self.width1 = self.main.gui.panel_width*0.3
+        self.width2 = self.main.gui.panel_width*1.7
 
         self.lbl_config_folder = QLabel('-- not defined --')
         self.list_files = QListWidget()

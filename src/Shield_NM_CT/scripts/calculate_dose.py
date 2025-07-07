@@ -7,7 +7,6 @@ Collection of small functions used in ImageQC.
 """
 import copy
 import numpy as np
-from skimage.transform import resize
 
 # Shield_NM_CT block start
 from Shield_NM_CT.ui import reusable_widgets as uir
@@ -153,7 +152,7 @@ def calculate_dose(main, source_number=None, modality=None):
         if progress_modal.wasCanceled() is False:
             status = True
 
-        progress_modal.setValue(max_progress)
+        progress_modal.close()
         if modality:
             if modality == 'NM':
                 dd = dose_NM
@@ -317,7 +316,6 @@ def calculate_wall_affect_sector(shape, source_pos, wall_pos):
         slope = (ymax-ymin)/(xmax-xmin)
         y0 = - (slope * xmin - ymin)
         y_at_source = slope*sx + y0  # vertical through source crossing wall
-        x_at_source = (sy - y0) / slope  # horizontal through source crossing wall
         if np.mean(anglemask) > 0.5:  # make sure affected segment less than half rotation
             anglemask = np.invert(anglemask)
         wall_affect_sector = anglemask  # geometric correction of thickness ignored
@@ -394,8 +392,8 @@ def calculate_transmission(shield_data, wall_affect_map=1, thickness=0.,
                     (thickness_map - sd.tvl1)/sd.tvl2)
             if not isinstance(wall_affect_map, int):
                 transmission[wall_affect_map == 0] = 1.
-        else:
-            errmsg = f'Found no shield data for {material} and {isotope}'
+    else:
+        errmsg = f'Found no shield data for {material} and {isotope}'
     return (transmission, errmsg)
 
 
@@ -543,6 +541,58 @@ def calculate_dose_NM(
     return dose_NM
 
 
+def get_adds_smoothed_dosemap(
+        template, sin_rear, sin_front, dists_sq, sin_angles):
+        """CT model smooth."""
+        map_shape = sin_angles.shape
+        adds = np.zeros(map_shape)
+        # smooth from front/rear to side
+        if template.smooth_angles_rear > 0:
+            sin_smooth = np.sin(
+                (template.rear_stop_angle - template.smooth_angles_rear)
+                * np.pi / 180.)
+            weights = np.divide(
+                sin_angles - sin_smooth, sin_rear - sin_smooth,
+                out=np.zeros(map_shape),
+                where=(sin_angles <= sin_rear) & (sin_angles >= sin_smooth))
+            max_add = template.scatter_factor_rear - template.scatter_factor_gantry
+            adds = np.divide(
+                 max_add * weights, dists_sq,
+                 out=np.zeros(map_shape),
+                 where=(weights > 0) & (dists_sq > 0.6**2))
+        if template.smooth_angles_front > 0:
+            sin_smooth = np.sin(
+                (template.front_stop_angle + template.smooth_angles_front)
+                * np.pi / 180.)
+            weights = np.divide(
+                sin_angles - sin_smooth, sin_front - sin_smooth,
+                out=np.zeros(map_shape),
+                where=(sin_angles >= sin_front) & (sin_angles <= sin_smooth))
+            max_add = template.scatter_factor_front - template.scatter_factor_gantry
+            adds2 = np.divide(
+                 max_add * weights, dists_sq,
+                 out=np.zeros(map_shape),
+                 where=(weights > 0) & (dists_sq > 0.6**2))
+            adds = adds + adds2
+        return adds
+
+
+def get_flatten_factors(template, sin_angles):
+    """CT model flatten."""
+    factors = np.ones(sin_angles.shape)
+    if template.angle_flatten_front != -90:
+        rot_f = template.angle_flatten_front
+        sin_flatten = np.sin(rot_f * np.pi / 180.)
+        factors = np.subtract(1, np.abs(sin_angles - sin_flatten),
+                              out=factors, where=sin_angles < sin_flatten)
+    if template.angle_flatten_rear != 90:
+        rot_f = template.angle_flatten_rear
+        sin_flatten = np.sin(rot_f * np.pi / 180.)
+        factors = np.subtract(1, np.abs(sin_angles - sin_flatten),
+                              out=factors, where=sin_angles > sin_flatten)
+    return factors
+
+
 def generate_CT_doseratemap(template,
                             rotation=0., map_shape=(0, 0), source_xy=(0, 0),
                             resolution=0.1, all_floors=True, general_values=None,
@@ -581,6 +631,7 @@ def generate_CT_doseratemap(template,
     dists_sq = resolution ** 2 * (xs ** 2 + ys ** 2)
     rot = - rotation * np.pi / 180.
     ys_rotated = -np.sin(rot)*xs + np.cos(rot)*ys
+    xs_rotated = np.cos(rot)*xs + np.sin(rot)*ys
     sin_angles = np.divide(resolution * ys_rotated, np.sqrt(dists_sq),
                            out=np.zeros_like(dists_sq),
                            where=dists_sq > 0)
@@ -600,47 +651,12 @@ def generate_CT_doseratemap(template,
             template.scatter_factor_rear, dists_sq,
             out=doseratemap,
             where=(sin_angles > sin_rear) & (dists_sq > 0.6**2))
-        # smooth from front/rear to side
-        if template.smooth_angles_rear > 0:
-            sin_smooth = np.sin(
-                (template.rear_stop_angle - template.smooth_angles_rear)
-                * np.pi / 180.)
-            weights = np.divide(
-                sin_angles - sin_smooth, sin_rear - sin_smooth,
-                out=np.zeros(map_shape),
-                where=(sin_angles <= sin_rear) & (sin_angles >= sin_smooth))
-            max_add = template.scatter_factor_rear - template.scatter_factor_gantry
-            adds = np.divide(
-                 max_add * weights, dists_sq,
-                 out=np.zeros(map_shape),
-                 where=(weights > 0) & (dists_sq > 0.6**2))
-            doseratemap = adds + doseratemap
-        if template.smooth_angles_front > 0:
-            sin_smooth = np.sin(
-                (template.front_stop_angle + template.smooth_angles_front)
-                * np.pi / 180.)
-            weights = np.divide(
-                sin_angles - sin_smooth, sin_front - sin_smooth,
-                out=np.zeros(map_shape),
-                where=(sin_angles >= sin_front) & (sin_angles <= sin_smooth))
-            max_add = template.scatter_factor_front - template.scatter_factor_gantry
-            adds = np.divide(
-                 max_add * weights, dists_sq,
-                 out=np.zeros(map_shape),
-                 where=(weights > 0) & (dists_sq > 0.6**2))
-            doseratemap = adds + doseratemap
 
-        factors = np.ones(map_shape)
-        if template.angle_flatten_front != -90:
-            rot_f = template.angle_flatten_front
-            sin_flatten = np.sin(rot_f * np.pi / 180.)
-            factors = np.subtract(1, np.abs(sin_angles - sin_flatten),
-                                  out=factors, where=sin_angles < sin_flatten)
-        if template.angle_flatten_rear != 90:
-            rot_f = template.angle_flatten_rear
-            sin_flatten = np.sin(rot_f * np.pi / 180.)
-            factors = np.subtract(1, np.abs(sin_angles - sin_flatten),
-                                  out=factors, where=sin_angles > sin_flatten)
+        adds = get_adds_smoothed_dosemap(
+            template, sin_rear, sin_front, dists_sq, sin_angles)
+        doseratemap = adds + doseratemap
+
+        factors = get_flatten_factors(template, sin_angles)
         factors = factors ** template.flatten_power
         doseratemap = factor * factors * doseratemap
 
@@ -648,8 +664,9 @@ def generate_CT_doseratemap(template,
             doseratemap = [doseratemap]
             for floor in [0, 2]:
                 floor_dist = get_floor_distance(floor, general_values)
-                dists_sq = resolution ** 2 * (xs ** 2 + ys ** 2) + floor_dist ** 2
-                sin_angles = resolution * ys / np.sqrt(dists_sq)
+                r_sq = (xs_rotated ** 2 + ys_rotated ** 2)
+                dists_sq = resolution ** 2 * r_sq + floor_dist ** 2
+                sin_angles = resolution * ys_rotated / np.sqrt(dists_sq)
                 doseratemap_this = template.scatter_factor_gantry / dists_sq
                 doseratemap_this = np.divide(
                     template.scatter_factor_front, dists_sq,
@@ -659,8 +676,14 @@ def generate_CT_doseratemap(template,
                     template.scatter_factor_rear, dists_sq,
                     out=doseratemap_this,
                     where=(sin_angles > sin_rear))
-                # TODO flatten to reduce currently ignored
-                doseratemap_this = factor * doseratemap_this
+
+                adds = get_adds_smoothed_dosemap(
+                    template, sin_rear, sin_front, dists_sq, sin_angles)
+                doseratemap_this = adds + doseratemap_this
+
+                factors = get_flatten_factors(template, sin_angles)
+                factors = factors ** template.flatten_power
+                doseratemap_this = factor * factors * doseratemap_this
                 doseratemap.insert(floor, doseratemap_this)
 
     return doseratemap

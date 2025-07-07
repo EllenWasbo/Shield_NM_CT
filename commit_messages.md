@@ -1,3 +1,23 @@
+# v2.0.10
+_25 Jun, 2025_
+
+New functionalities:
+- More (and fixed) options for color settings. Now possible to set named matplotlib-colormaps, and also setting colormap for occupancy factors.
+- CT model with options smooth and flatten used to be ignored for floor above and below. Now included.
+
+Bugfixes:
+- IMPORTANT! Occupancy-factor for CT doses have until now not had any effect on the dose. This is now corrected. 
+	- Apologies, if this have had effect on decisions.
+	- Validation for CT, similar to NM is now added to the Wiki and to the automatic tests (pytest).
+- IMPORTANT 2! Rotation of CT ignored for floor above/below. Now fixed.
+- Zoom and pan now better handled.
+- Fixed quite a few issues in settings (adding/editing isotopes, materials, shield_data, color settings)
+- Fixed issues with user interface and calculations after visiting settings:
+	- List of isotopes were updated in case of changes in settings, but without visually selecting the correct inital value for the current project.
+	- Issues with missing isotopes, kV sources, CT models and materials if renaming in Settings.
+	- Please validate changes in settings with simple calculations f.x. with the simple project available in tests using the sources or materials you have added or edited.
+- Avoiding default shielding for the floors being set to 200mm Lead. Now correctly set default 200mm Concrete.
+
 # v2.0.9
 _21 May, 2025_
 

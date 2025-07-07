@@ -80,7 +80,6 @@ class GuiData():
     panel_height = 700
     char_width = 7
     mouse_in_axes = False
-    zoom_active = False
 
 
 class MainWindow(QMainWindow):
@@ -97,6 +96,11 @@ class MainWindow(QMainWindow):
         self.nm_doserate_map = np.zeros(2)
         self.ct_dose_map = np.zeros(2)
         self.ot_dose_map = np.zeros(2)
+
+        self.renamed_isotopes = [[], []]
+        self.renamed_materials = [[], []]
+        self.renamed_kV_sources = [[], []]
+        self.renamed_ct_models = [[], []]
 
         self.save_blocked = False
         if os.environ[ENV_USER_PREFS_PATH] == '':
@@ -224,13 +228,13 @@ class MainWindow(QMainWindow):
         """Refresh data from settings files affecting GUI in main window."""
         if after_edit_settings is False:
             print('Reading configuration settings...')
+        _, _, self.general_values = cff.load_settings(fname='general_values')
         self.lastload = time()
         _, _, self.user_prefs = cff.load_user_prefs()
         _, _, self.isotopes = cff.load_settings(fname='isotopes')
         _, _, self.materials = cff.load_settings(fname='materials')
         _, _, self.ct_models = cff.load_settings(fname='ct_models')
         _, _, self.shield_data = cff.load_settings(fname='shield_data')
-        _, _, self.general_values = cff.load_settings(fname='general_values')
         _, _, self.colormaps = cff.load_settings(fname='colormaps')
         self.create_cmap_objects()
         self.gui.annotations_linethick = self.user_prefs.annotations_linethick
@@ -239,14 +243,29 @@ class MainWindow(QMainWindow):
         self.gui.snap_radius = self.user_prefs.snap_radius
 
         if after_edit_settings:
-            self.NMsources_tab.update_isotopes()
-            self.walls_tab.update_materials()
-            self.scale_tab.update_material_lists()
+            self.NMsources_tab.update_isotopes(
+                rename_list=self.renamed_isotopes)
+            self.walls_tab.update_materials(
+                rename_list=self.renamed_materials)
+            self.scale_tab.update_material_lists(
+                rename_list=self.renamed_materials)
+            self.CTsources_tab.update_kV_sources(
+                rename_list_kV_sources=self.renamed_kV_sources,
+                rename_list_ct_models=self.renamed_ct_models)
+            self.OTsources_tab.update_kV_sources(
+                rename_list=self.renamed_kV_sources)
             self.wFloorDisplay.canvas.update_annotations_fontsize(
                 self.gui.annotations_fontsize)
+            self.renamed_isotopes = [[], []]
+            self.renamed_materials = [[], []]
+            self.renamed_kV_sources = [[], []]
+            self.renamed_ct_models = [[], []]
             if 'Walls' in self.wVisual.annotate_texts():
                 if self.gui.calibration_factor is not None:
                     self.walls_tab.update_wall_annotations()
+            # if colormaps changed
+            self.wFloorDisplay.canvas.update_overlay()
+            self.wVisual.colorbar.colorbar_draw()
 
     def update_general_values(self):
         """Update gui with current self.general_values."""
@@ -260,22 +279,26 @@ class MainWindow(QMainWindow):
         """Create cmap when register_cmap do not work well."""
         self.boundaries = []
         self.cmaps = []
-        names = ['dose', 'doserate']
+        names = ['dose', 'doserate','occ']
         for i, colormap in enumerate(self.colormaps):
-            colors = copy.deepcopy(colormap.table)
-            vals = [row[0] for row in colormap.table]
-            minval = min(vals)
-            maxval = max(vals)
-            for colno, row in enumerate(colors):
-                colors[colno][0] = row[0] / maxval
-            if minval > 0:
-                colors.insert(0, [0, '#ffffff'])
-                vals.insert(0, 0)
-            map_object = LinearSegmentedColormap.from_list(
-                names[i], colors, N=len(colors))
-            extend_value = vals[-1] * 1.05
-            self.boundaries.append(vals + [extend_value])
-            self.cmaps.append(map_object)
+            if colormap.use == 'table':
+                colors = copy.deepcopy(colormap.table)
+                vals = [row[0] for row in colormap.table]
+                minval = min(vals)
+                maxval = max(vals)
+                for colno, row in enumerate(colors):
+                    colors[colno][0] = row[0] / maxval
+                if minval > 0:
+                    colors.insert(0, [0, '#ffffff'])
+                    vals.insert(0, 0)
+                map_object = LinearSegmentedColormap.from_list(
+                    names[i], colors, N=len(colors))
+                extend_value = vals[-1] * 1.05
+                self.boundaries.append(vals + [extend_value])
+                self.cmaps.append(map_object)
+            else:
+                self.cmaps.append(colormap.cmap)
+                self.boundaries.append([colormap.cmin, colormap.cmax])
 
     def load_floor_plan_image(self):
         """Open image and update GUI."""
@@ -328,7 +351,7 @@ class MainWindow(QMainWindow):
         self.ot_dose_map = np.zeros(2)
         self.update_calculation_points()
         if 'Dose' in self.wVisual.overlay_text():
-            self.wFloorDisplay.canvas.update_dose_overlay()
+            self.wFloorDisplay.canvas.update_overlay()
         #TODO Info that dose is reset?
 
     def calculate_dose(self, source_number=None, modality=None):
@@ -347,7 +370,7 @@ class MainWindow(QMainWindow):
             self.sum_dose_days()
             if 'Dose' not in self.wVisual.overlay_text():
                 self.wVisual.btns_overlay.button(2).setChecked(True)
-                self.wFloorDisplay.canvas.update_dose_overlay()
+                self.wFloorDisplay.canvas.update_overlay()
                 self.wVisual.colorbar.colorbar_draw()
 
     def sum_dose_days(self):
@@ -385,6 +408,7 @@ class MainWindow(QMainWindow):
                             temp = 0.001 * wd * df[floor]
                             if dd['transmission_maps'][i]:
                                 temp = dd['transmission_maps'][i][floor] * temp
+                            temp = self.occ_map * temp
                             self.ct_dose_map = self.ct_dose_map + temp
             else:
                 self.ct_dose_map = np.zeros(2)
@@ -405,7 +429,7 @@ class MainWindow(QMainWindow):
                 self.ot_dose_map = np.zeros(2)
             self.update_calculation_points()
             if 'Dose' in self.wVisual.overlay_text():
-                self.wFloorDisplay.canvas.update_dose_overlay()
+                self.wFloorDisplay.canvas.update_overlay()
 
     def update_calculation_points(self):
         """Update dose to calculation points."""
@@ -534,7 +558,7 @@ class MainWindow(QMainWindow):
                 if self.gui.current_tab == 'Areas':
                     if self.wVisual.overlay_text() == 'None':
                         self.wVisual.btns_overlay.button(1).setChecked(True)
-                        self.areas_tab.update_occ_map()
+                        #self.areas_tab.update_occ_map()
                         self.wVisual.overlay_selections_changed()
                 elif self.gui.current_tab == 'Walls':
                     if 'Occ' in self.wVisual.overlay_text():
@@ -730,6 +754,9 @@ class MainWindow(QMainWindow):
                 initial_template_label=initial_template_label)
         dlg.exec()
         self.update_settings(after_edit_settings=True)
+        if self.dose_dict:
+            if dlg.reset_dose:
+                self.calculate_dose()
 
     def create_menu_toolBar(self):
         """GUI of MenuBar and main ToolBar."""
@@ -865,7 +892,8 @@ class FloorCanvas(FigureCanvasQTAgg):
         """When mouse button pressed."""
         if event.button.name == 'LEFT':
             self.mouse_pressed = True
-            if self.main.gui.zoom_active is False:
+            nav_mode = self.main.wFloorDisplay.navtoolbar.mode._navigate_mode
+            if nav_mode is None:
                 self.main.gui.x0, self.main.gui.y0 = event.xdata, event.ydata
                 self.main.gui.x1, self.main.gui.y1 = event.xdata, event.ydata
 
@@ -956,7 +984,8 @@ class FloorCanvas(FigureCanvasQTAgg):
     def on_motion(self, event):
         """When mouse pressed and moved."""
         if self.mouse_pressed:
-            if self.main.gui.zoom_active is False:
+            nav_mode = self.main.wFloorDisplay.navtoolbar.mode._navigate_mode
+            if nav_mode is None:
                 if self.main.gui.x0 is not None:
                     self.main.gui.x1, self.main.gui.y1 = event.xdata, event.ydata
                     if self.main.gui.current_tab == 'Areas':
@@ -1080,48 +1109,49 @@ class FloorCanvas(FigureCanvasQTAgg):
         """When mouse button released."""
         if self.mouse_pressed:
             self.mouse_pressed = False
-        if self.main.gui.zoom_active is False:
             self.main.gui.x1, self.main.gui.y1 = event.xdata, event.ydata
 
+            nav_mode = self.main.wFloorDisplay.navtoolbar.mode._navigate_mode
             if self.main.gui.current_tab in ['Areas', 'Scale', 'Walls']:
-                if self.main.gui.current_tab in ['Areas', 'Walls']:
-                    if self.handles_visible and self.drag_handle is False:
-                        if self.recent_pick:
-                            self.recent_pick = False
+                if nav_mode is None:
+                    if self.main.gui.current_tab in ['Areas', 'Walls']:
+                        if self.handles_visible and self.drag_handle is False:
+                            if self.recent_pick:
+                                self.recent_pick = False
+                            else:
+                                self.reset_hover_pick()
                         else:
-                            self.reset_hover_pick()
+                            self.try_snap(event)
+                    if self.main.gui.x1 is not None:
+                        width = np.abs(self.main.gui.x1 - self.main.gui.x0)
+                        height = np.abs(self.main.gui.y1 - self.main.gui.y0)
                     else:
-                        self.try_snap(event)
-                if self.main.gui.x1 is not None:
-                    width = np.abs(self.main.gui.x1 - self.main.gui.x0)
-                    height = np.abs(self.main.gui.y1 - self.main.gui.y0)
-                else:
-                    width = 0
-                    height = 0
+                        width = 0
+                        height = 0
 
-                if self.drag_handle is False and (width + height) >= 20:
-                    if self.main.gui.current_tab == 'Areas':
-                        self.area_temp.set_width(width)
-                        self.area_temp.set_height(height)
-                        self.area_temp.set_xy((
-                            min(self.main.gui.x0, self.main.gui.x1),
-                            min(self.main.gui.y0, self.main.gui.y1)))
-                    elif self.main.gui.current_tab in ['Scale', 'Walls']:
-                        for p in self.ax.lines:
-                            if p.get_gid() == 'line_temp':
-                                if self.main.gui.rectify:
-                                    diff_x = abs(self.main.gui.x0 - self.main.gui.x1)
-                                    diff_y = abs(self.main.gui.y0 - self.main.gui.y1)
-                                    if diff_x > diff_y:  # keep y0
-                                        self.main.gui.y1 = self.main.gui.y0
-                                    else:  # keep x0
-                                        self.main.gui.x1 = self.main.gui.x0
-                                p.set_data(
-                                    [self.main.gui.x0, self.main.gui.x1],
-                                    [self.main.gui.y0, self.main.gui.y1])
-                                break
-                elif self.drag_handle:
-                    self.finish_drag()
+                    if self.drag_handle is False and (width + height) >= 20:
+                        if self.main.gui.current_tab == 'Areas':
+                            self.area_temp.set_width(width)
+                            self.area_temp.set_height(height)
+                            self.area_temp.set_xy((
+                                min(self.main.gui.x0, self.main.gui.x1),
+                                min(self.main.gui.y0, self.main.gui.y1)))
+                        elif self.main.gui.current_tab in ['Scale', 'Walls']:
+                            for p in self.ax.lines:
+                                if p.get_gid() == 'line_temp':
+                                    if self.main.gui.rectify:
+                                        diff_x = abs(self.main.gui.x0 - self.main.gui.x1)
+                                        diff_y = abs(self.main.gui.y0 - self.main.gui.y1)
+                                        if diff_x > diff_y:  # keep y0
+                                            self.main.gui.y1 = self.main.gui.y0
+                                        else:  # keep x0
+                                            self.main.gui.x1 = self.main.gui.x0
+                                    p.set_data(
+                                        [self.main.gui.x0, self.main.gui.x1],
+                                        [self.main.gui.y0, self.main.gui.y1])
+                                    break
+                    elif self.drag_handle:
+                        self.finish_drag()
 
             else:  # mark release position
                 if hasattr(self, 'ax'):
@@ -1687,53 +1717,70 @@ class FloorCanvas(FigureCanvasQTAgg):
                 )
         self.draw_idle()
 
-    def get_dose_overlay(self):
-        """Update overlay coupled to dose or doserate."""
-        overlay_string = self.main.wVisual.overlay_text()
-        overlay = np.zeros(self.main.occ_map.shape)
-        cmap = self.main.cmaps[0]#'dose'
-        if overlay_string == 'Dose':
-            dose_no = self.main.wVisual.btns_dose.checkedId()
-            if dose_no == 0:
-                if self.main.nm_dose_map.shape == self.main.occ_map.shape:
-                    overlay = self.main.nm_dose_map
-                if self.main.ct_dose_map.shape == self.main.occ_map.shape:
-                    overlay = overlay + self.main.ct_dose_map
-                if self.main.ot_dose_map.shape == self.main.occ_map.shape:
-                    overlay = overlay + self.main.ot_dose_map
-            elif dose_no == 1:
-                if self.main.nm_dose_map.shape == self.main.occ_map.shape:
-                    overlay = self.main.nm_dose_map
-            elif dose_no == 2:
-                if self.main.ct_dose_map.shape == self.main.occ_map.shape:
-                    overlay = self.main.ct_dose_map
-            elif dose_no == 3:
-                if self.main.ot_dose_map.shape == self.main.occ_map.shape:
-                    overlay = self.main.ot_dose_map
-        else:
-            if self.main.nm_doserate_map.shape == self.main.occ_map.shape:
-                overlay = self.main.nm_doserate_map
-                cmap = self.main.cmaps[1]#'doserate'
-        return overlay, cmap
+    def set_overlay_cmap(self, cmap_no=-1, overlay_array=None):
+        if cmap_no > -1 and overlay_array is not None:
+            cmap = self.main.cmaps[cmap_no]
+            if isinstance(cmap, str):
+                cmin = self.main.boundaries[cmap_no][0]
+                cmax = self.main.boundaries[cmap_no][1]
+                norm = mpl.colors.Normalize(vmin=cmin, vmax=cmax)
+            else:
+                cmin = 0
+                cmax = self.main.colormaps[cmap_no].table[-1][0]
+                boundaries = self.main.boundaries[cmap_no]
+                norm = mpl.colors.BoundaryNorm(boundaries, len(boundaries))
 
-    def update_dose_overlay(self):
-        """Update GUI with current dose overlay."""
-        overlay, cmap = self.get_dose_overlay()
-        if cmap.name == 'dose':
-            maxclim = self.main.colormaps[0].table[-1][0]
-            boundaries = self.main.boundaries[0]
+            try:
+                self.image_overlay.set(
+                    cmap=cmap, norm=norm,
+                    alpha=self.main.gui.alpha_overlay, clim=(cmin, cmax))
+                self.image_overlay.set_data(overlay_array)
+                #self.main.wFloorDisplay.canvas.draw_idle()
+            except (TypeError, AttributeError):
+                pass
         else:
-            maxclim = self.main.colormaps[1].table[-1][0]
-            boundaries = self.main.boundaries[1]
-        norm = mpl.colors.BoundaryNorm(boundaries, len(boundaries))
-        try:
             self.image_overlay.set(
-                cmap=cmap, norm=norm,
-                alpha=self.main.gui.alpha_overlay, clim=(0., maxclim))
-            self.main.wFloorDisplay.canvas.image_overlay.set_data(overlay)
-            self.main.wFloorDisplay.canvas.draw_idle()
-        except (TypeError, AttributeError):
-            pass
+                data=np.zeros(self.main.image.shape), alpha=0)
+        self.draw_idle()
+
+    def update_overlay(self):
+        """Update overlay matrix and GUI (dose/doserate or occupancy factor)."""
+        overlay_string = self.main.wVisual.overlay_text()
+
+        cmap_no = -1
+        overlay = None
+        if overlay_string != 'None':
+            overlay = np.zeros(self.main.occ_map.shape)
+            if overlay_string == 'Occupancy factors':
+                self.main.areas_tab.update_occ_map(
+                    update_overlay=False, update_patches=False)
+                overlay = self.main.occ_map
+                cmap_no = 2
+            elif overlay_string == 'Dose':
+                cmap_no = 0
+                dose_no = self.main.wVisual.btns_dose.checkedId()
+                if dose_no == 0:
+                    if self.main.nm_dose_map.shape == self.main.occ_map.shape:
+                        overlay = self.main.nm_dose_map
+                    if self.main.ct_dose_map.shape == self.main.occ_map.shape:
+                        overlay = overlay + self.main.ct_dose_map
+                    if self.main.ot_dose_map.shape == self.main.occ_map.shape:
+                        overlay = overlay + self.main.ot_dose_map
+                elif dose_no == 1:
+                    if self.main.nm_dose_map.shape == self.main.occ_map.shape:
+                        overlay = self.main.nm_dose_map
+                elif dose_no == 2:
+                    if self.main.ct_dose_map.shape == self.main.occ_map.shape:
+                        overlay = self.main.ct_dose_map
+                elif dose_no == 3:
+                    if self.main.ot_dose_map.shape == self.main.occ_map.shape:
+                        overlay = self.main.ot_dose_map
+            else:
+                if self.main.nm_doserate_map.shape == self.main.occ_map.shape:
+                    overlay = self.main.nm_doserate_map
+                    cmap_no = 1
+
+        self.set_overlay_cmap(cmap_no, overlay_array=overlay)
 
     def floor_draw(self):
         """Draw or redraw all elements."""
@@ -1749,8 +1796,10 @@ class FloorCanvas(FigureCanvasQTAgg):
 
         self.image_overlay = self.ax.imshow(
             np.zeros(self.main.image.shape[0:2]), alpha=0)
-        self.main.wVisual.overlay_selections_changed()
         self.draw()
+        self.update_overlay()
+        #self.main.wVisual.overlay_selections_changed()
+        #self.draw()
 
 
 class FloorWidget(QWidget):
@@ -1761,9 +1810,9 @@ class FloorWidget(QWidget):
 
         self.main = main
         self.canvas = FloorCanvas(self.main)
-        tbimg = NavToolBar(self.canvas, self)
+        self.navtoolbar = NavToolBar(self.canvas, self)
         self.tbimgPos = PositionToolBar(self.canvas, self.main)
-        tbimg.addWidget(self.tbimgPos)
+        self.navtoolbar.addWidget(self.tbimgPos)
 
         act_edit_annotations = QAction(
             QIcon(f'{os.environ[ENV_ICON_PATH]}edit.png'),
@@ -1775,11 +1824,11 @@ class FloorWidget(QWidget):
             f'{os.environ[ENV_ICON_PATH]}layout_maximg.png'))
         self.tool_imgsize.clicked.connect(self.clicked_imgsize)
         self.tool_imgsize.setCheckable(True)
-        tbimg.addAction(act_edit_annotations)
-        tbimg.addWidget(self.tool_imgsize)
+        self.navtoolbar.addAction(act_edit_annotations)
+        self.navtoolbar.addWidget(self.tool_imgsize)
 
         vlo = QVBoxLayout()
-        vlo.addWidget(tbimg)
+        vlo.addWidget(self.navtoolbar)
         vlo.addWidget(self.canvas)
         self.setLayout(vlo)
 
@@ -1825,20 +1874,20 @@ class NavToolBar(NavigationToolbar2QT):
         super().__init__(canvas, parent)
         self.main = parent.main
         for x in self.actions():
-            if x.text() in ['Back', 'Forward', 'Subplots']:
+            if x.text() in ['Subplots']:
                 self.removeAction(x)
 
     def set_message(self, event):
         """Hide cursor position and value text."""
         pass
 
-    def zoom(self, *args):
-        """Override super zoom to set zoom flag."""
-        if self.main.gui.zoom_active:
-            self.main.gui.zoom_active = False
-        else:
-            self.main.gui.zoom_active = True
-        super().zoom(*args)
+    def back(self, *args):
+        super().back(*args)
+        self.canvas.on_zoom_changed()
+
+    def forward(self, *args):
+        super().forward(*args)
+        self.canvas.on_zoom_changed()
 
     def release_zoom(self, event):
         """Override super().release_zoom to update wall-thickness."""
@@ -2021,38 +2070,47 @@ class ColorBar(FigureCanvasQTAgg):
         if cmap_name:
             overlay_text = self.main.wVisual.overlay_text()[:3]
             boundaries = None
+            map_no = -1
             if overlay_text == 'Occ':
                 label = 'Occupancy factor'
-                color_values = np.arange(5)/4
-                norm = mpl.colors.Normalize(vmin=0, vmax=1)
-                boundaries = None
+                map_no = 2
             elif overlay_text == 'Dos':
                 label = 'mSv'
-                boundaries = self.main.boundaries[0]
-                norm = mpl.colors.BoundaryNorm(boundaries, len(boundaries))
-                color_values = boundaries[:-1]
+                map_no = 0
             elif overlay_text == 'Max':
                 label = 'max \u03bc' + 'Sv/h'
-                # color_values = [row[0] for row in self.main.colormaps[0].table]
-                boundaries = self.main.boundaries[1]
-                norm = mpl.colors.BoundaryNorm(boundaries, len(boundaries))
-                color_values = boundaries[:-1]
+                map_no = 1
             else:
                 label = ''
                 ax.axis('off')
 
             if label:
-                if cmap_name in ['dose', 'doserate']:
-                    no = 0 if cmap_name == 'dose' else 1
-                    cmap = self.main.cmaps[no]
-                else:
-                    cmap = cmap_name
-                colorbar = mpl.colorbar.ColorbarBase(
-                    ax, cmap=cmap, norm=norm, orientation='horizontal',
-                    alpha=self.main.gui.alpha_overlay,
-                    extend='max', extendfrac='auto', extendrect=True,
-                    spacing='proportional', drawedges=False, ticks=color_values)
-                colorbar.set_label(label)
+                cmap = self.main.cmaps[map_no]
+                if isinstance(cmap, str):
+                    # [name, min, max]
+                    cmin = self.main.boundaries[map_no][0]
+                    cmax = self.main.boundaries[map_no][1]
+                    color_values = np.arange(5)/4 * (cmax - cmin) + cmin
+                    norm = mpl.colors.Normalize(vmin=cmin, vmax=cmax)
+                else:  # cmap object
+                    boundaries = self.main.boundaries[map_no]
+                    norm = mpl.colors.BoundaryNorm(boundaries, len(boundaries))
+                    color_values = boundaries[:-1]
+
+                try:
+                    colorbar = mpl.colorbar.ColorbarBase(
+                        ax, cmap=cmap, norm=norm, orientation='horizontal',
+                        alpha=self.main.gui.alpha_overlay,
+                        extend='max', extendfrac='auto', extendrect=True,
+                        spacing='proportional', drawedges=False,
+                        ticks=color_values)
+                    colorbar.set_label(label)
+                except ValueError:
+                    QMessageBox.warning(
+                        self, 'Failed drawing',
+                        'Failed drawing overlay. Colormap values are not '
+                        'monotonically increasing. Please fix this in '
+                        'Settings - Color settings.')
 
         self.draw()
 
@@ -2203,25 +2261,12 @@ class VisualizationWidget(QWidget):
             self.main.wFloorDisplay.canvas.draw_idle()
 
     def overlay_selections_changed(self):
-        """Update display when Overlay selections change."""
-        if self.overlay_text() == 'None':
-            self.main.wFloorDisplay.canvas.image_overlay.set(
-                data=np.zeros(self.main.image.shape), alpha=0)
-        elif self.overlay_text() == 'Occupancy factors':
-            self.main.areas_tab.update_occ_map()
-            norm = mpl.colors.Normalize(vmin=0, vmax=1)
-            self.main.wFloorDisplay.canvas.image_overlay.set(
-                alpha=0.2, cmap='rainbow', norm=norm, clim=(0., 1.))
-            self.set_alpha_overlay(self.main.gui.alpha_overlay)
-            self.main.wFloorDisplay.canvas.image_overlay.set_data(self.main.occ_map)
-        else:
-            self.main.wFloorDisplay.canvas.update_dose_overlay()
-        self.main.wFloorDisplay.canvas.draw_idle()
+        self.main.wFloorDisplay.canvas.update_overlay()
         self.colorbar.colorbar_draw()
 
     def dose_selections_changed(self):
         """Update display when Dose selections change."""
-        self.main.wFloorDisplay.canvas.update_dose_overlay()
+        self.main.wFloorDisplay.canvas.update_overlay()
         self.colorbar.colorbar_draw()
 
     def set_alpha_overlay(self, value):

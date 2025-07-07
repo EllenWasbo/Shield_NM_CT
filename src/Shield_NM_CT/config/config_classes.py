@@ -114,7 +114,11 @@ class ShieldData:
 
 @dataclass
 class ColorMap:
-    """Dose (mSv) or doserate (uSv) values and colors to generate colormaps."""
+    """Dose (mSv) or doserate (uSv) values and colors to generate colormaps or cmap."""
 
     label: str = ''
+    use: str = 'cmap'  # or table
     table: list = field(default_factory=list)  # [[dose, #rrggbb],[dose2, #rrggbb],...]
+    cmap: str = ''
+    cmin: float = 0.0
+    cmax: float = 1.0
