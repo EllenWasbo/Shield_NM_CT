@@ -5,7 +5,7 @@ Functions used for iQCconstants on startup.
 
 @author: Ellen Wasbo
 """
-from PyQt5.QtCore import QFile, QTextStream
+from PyQt6.QtCore import QFile, QIODevice, QTextStream
 import yaml
 
 # Shield_NM_CT block start
@@ -24,7 +24,7 @@ def read_yaml(fname=''):
     settings = []
     f_text = ''
     file = QFile(f':/config_defaults/{fname}.yaml')
-    file.open(QFile.ReadOnly | QFile.Text)
+    file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text)
     f_text = QTextStream(file).readAll()
 
     if f_text != '':

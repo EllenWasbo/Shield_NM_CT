@@ -9,7 +9,7 @@ import os
 import numpy as np
 from fnmatch import fnmatch
 from pathlib import Path
-from PyQt5.QtWidgets import QMessageBox
+from PyQt6.QtWidgets import QMessageBox
 from matplotlib.path import Path as mplPath
 from matplotlib.transforms import Affine2D
 

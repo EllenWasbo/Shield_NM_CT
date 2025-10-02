@@ -1,5 +1,18 @@
+# v2.1.0
+_02 Oct, 2025_
+
+Upgrade to python version 3.11-3.13 and packages (upgrade from PyQt5 to PyQt6, numpy 2.0+ and more).
+
+Bugfixes:
+- Fixed error/crash when editing color settings, leaving only one color and trying to save the change.
+
+Changes that affect usage of Shield_NM_CT:
+- Dark mode now follow the system settings for this. Dark mode setting of user preferences removed.
+- Import of projects from IDL version of Shield_NM_CT removed as IDL-users assumed to already have converted.
+
+
 # v2.0.10
-_25 Jun, 2025_
+_08 Jul, 2025_
 
 New functionalities:
 - More (and fixed) options for color settings. Now possible to set named matplotlib-colormaps, and also setting colormap for occupancy factors.

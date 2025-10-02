@@ -14,14 +14,14 @@ from pathlib import Path
 import shutil
 import webbrowser
 
-from PyQt5.QtGui import QIcon, QKeyEvent, QCursor
-from PyQt5.QtCore import Qt, QTimer, QFile
-from PyQt5.QtWidgets import (
-    QApplication, qApp, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
+from PyQt6.QtGui import QIcon, QKeyEvent, QCursor, QAction
+from PyQt6.QtCore import Qt, QTimer, QFile, QIODevice
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QGroupBox, QButtonGroup, QScrollArea, QTabWidget,
     QPushButton, QLabel, QSpinBox,
     QRadioButton, QCheckBox, QSlider, QToolButton,
-    QMenu, QAction, QMessageBox, QFileDialog
+    QMenu, QMessageBox, QFileDialog
     )
 
 import matplotlib as mpl
@@ -44,7 +44,6 @@ import Shield_NM_CT.ui.reusable_widgets as uir
 from Shield_NM_CT.ui.ui_dialogs import AboutDialog, EditAnnotationsDialog
 from Shield_NM_CT.scripts.calculate_dose import (calculate_dose, get_floor_distance)
 from Shield_NM_CT.scripts import mini_methods
-from Shield_NM_CT.scripts.read_idl_dat import ReadDat
 import Shield_NM_CT.resources
 # Shield_NM_CT block end
 
@@ -129,7 +128,7 @@ class MainWindow(QMainWindow):
         self.create_menu_toolBar()
 
         stream = QFile(':/icons/floorPlan_big.png')
-        if stream.open(QFile.ReadOnly):
+        if stream.open(QIODevice.OpenModeFlag.ReadOnly):
             data = stream.readAll()
             stream.close()
             self.default_floorplan = mpimg.imread(BytesIO(data))
@@ -157,7 +156,7 @@ class MainWindow(QMainWindow):
 
         bbox = QHBoxLayout()
 
-        self.split_lft_rgt = QSplitter(Qt.Horizontal)
+        self.split_lft_rgt = QSplitter(Qt.Orientation.Horizontal)
         wid_lft = QWidget()
         wid_rgt = QWidget()
         lo_lft = QVBoxLayout()
@@ -169,7 +168,7 @@ class MainWindow(QMainWindow):
         bbox.addWidget(self.split_lft_rgt)
 
         # Fill left box
-        self.split_lft = QSplitter(Qt.Vertical)
+        self.split_lft = QSplitter(Qt.Orientation.Vertical)
         lo_lft.addWidget(self.split_lft)
         wid_top = QWidget()
         wid_btm = QWidget()
@@ -183,7 +182,7 @@ class MainWindow(QMainWindow):
         lo_btm.addWidget(self.wVisual)
 
         # Fill right box
-        self.split_rgt = QSplitter(Qt.Vertical)
+        self.split_rgt = QSplitter(Qt.Orientation.Vertical)
         lo_rgt.addWidget(self.split_rgt)
         wid_top = QWidget()
         wid_btm = QWidget()
@@ -202,8 +201,8 @@ class MainWindow(QMainWindow):
             round(2.*self.gui.panel_width), round(self.gui.panel_height))
 
         scroll = QScrollArea()
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setWidgetResizable(True)
         scroll.setWidget(widFull)
         self.setCentralWidget(scroll)
@@ -220,7 +219,7 @@ class MainWindow(QMainWindow):
             self, title='Warnings',
             msg='Found issues during startup',
             info='See details',
-            icon=QMessageBox.Warning,
+            icon=QMessageBox.Icon.Warning,
             details=warnings)
         dlg.exec()
 
@@ -363,7 +362,7 @@ class MainWindow(QMainWindow):
                 self, title='Warnings',
                 msg='Found issues during calculation',
                 info='See details',
-                icon=QMessageBox.Warning,
+                icon=QMessageBox.Icon.Warning,
                 details=msgs)
             dlg.exec()
         if status:
@@ -484,10 +483,10 @@ class MainWindow(QMainWindow):
     def keyReleaseEvent(self, event):
         """Trigger get_pos when Enter/Return pressed."""
         if isinstance(event, QKeyEvent):
-            if event.key() == Qt.Key_Return:
+            if event.key() == Qt.Key.Key_Return:
                 if self.gui.mouse_in_axes:
                     self.tabs.currentWidget().get_pos()
-            elif event.key() == Qt.Key_Plus:
+            elif event.key() == Qt.Key.Key_Plus:
                 if self.gui.current_tab != 'Scale':
                     if self.tabs.currentWidget().cellwidget_is_text is False:
                         try:
@@ -495,7 +494,7 @@ class MainWindow(QMainWindow):
                         except AttributeError:
                             pass
             """
-            elif event.key() == Qt.Key_Delete:
+            elif event.key() == Qt.Key.Key_Delete:
                 if self.gui.current_tab != 'Scale':
                     if self.tabs.currentWidget().cellwidget_is_text is False:
                         try:
@@ -520,8 +519,8 @@ class MainWindow(QMainWindow):
 
     def start_wait_cursor(self):
         """Block mouse events by wait cursor."""
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        qApp.processEvents()
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        QApplication.instance().processEvents()
 
     def stop_wait_cursor(self):
         """Return to normal mouse cursor after wait cursor."""
@@ -618,7 +617,7 @@ class MainWindow(QMainWindow):
         """Load image and tables from folder."""
         if not path:
             dlg = QFileDialog()
-            dlg.setFileMode(QFileDialog.Directory)
+            dlg.setFileMode(QFileDialog.FileMode.Directory)
             if dlg.exec():
                 fname = dlg.selectedFiles()
                 path = Path(os.path.normpath(fname[0]))
@@ -691,7 +690,7 @@ class MainWindow(QMainWindow):
         if self.gui.load_path == '' or save_as:
             # start new project folder
             dlg = QFileDialog()
-            dlg.setFileMode(QFileDialog.Directory)
+            dlg.setFileMode(QFileDialog.FileMode.Directory)
             if dlg.exec():
                 fname = dlg.selectedFiles()
                 path = os.path.normpath(fname[0])
@@ -730,19 +729,6 @@ class MainWindow(QMainWindow):
             else:
                 QMessageBox.warning(
                     self, 'Failed saving', f'No writing permission for {path}')
-
-    def open_project_IDL(self):
-        """Load .dat file from IDL version of program."""
-        dlg = QFileDialog(self,
-                          directory=r'C:\Users\ellen\Documents\GitHub\Shield_NM_CT\tests\testdat',
-                          filter='*.dat')
-        if dlg.exec():
-            fname = dlg.selectedFiles()
-            path = Path(os.path.normpath(fname[0]))
-            if path:
-                obj = ReadDat(self, path)
-                if obj.folder:
-                    self.open_project(path=Path(obj.folder))
 
     def run_settings(self, initial_view='', initial_template_label=''):
         """Display settings dialog."""
@@ -784,9 +770,6 @@ class MainWindow(QMainWindow):
         act_save_project_as.triggered.connect(
             lambda: self.save_project(save_as=True))
 
-        act_load_projectIDL = QAction('Load .dat file from IDL version...', self)
-        act_load_projectIDL.triggered.connect(self.open_project_IDL)
-
         act_settings = QAction('Settings', self)
         act_settings.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}gears.png'))
         act_settings.setToolTip('Open the user settings manager')
@@ -815,7 +798,7 @@ class MainWindow(QMainWindow):
         # fill menus
         mFile = QMenu('&File', self)
         mFile.addActions([act_load_floor_img, act_load_project, act_save_project,
-                          act_save_project_as, act_load_projectIDL, act_clear_all,
+                          act_save_project_as, act_clear_all,
                           act_quit])
         menu_bar.addMenu(mFile)
         mSett = QMenu('&Settings', self)
@@ -2055,7 +2038,7 @@ class ColorBar(FigureCanvasQTAgg):
 
     def __init__(self, main):
         self.fig = mpl.figure.Figure(figsize=(8, 1))
-        self.fig.subplots_adjust(0.1, 0.5, 0.9, 0.95)
+        self.fig.subplots_adjust(0.1, 0.6, 0.9, 0.95)
         FigureCanvasQTAgg.__init__(self, self.fig)
         self.main = main
 
@@ -2175,13 +2158,13 @@ class VisualizationWidget(QWidget):
         vlo_alpha = QVBoxLayout()
         self.hlo.addLayout(vlo_alpha)
         self.colorbar = ColorBar(self.main)
-        self.alpha_overlay = QSlider(Qt.Horizontal)
+        self.alpha_overlay = QSlider(Qt.Orientation.Horizontal)
         self.alpha_overlay_value = QLabel(
             f'{100*self.main.gui.alpha_overlay:.0f} %')
         self.alpha_overlay.setRange(0, 100)
         self.alpha_overlay.setValue(round(100*self.main.gui.alpha_overlay))
         self.alpha_overlay.valueChanged.connect(self.update_alpha_overlay)
-        self.alpha_image = QSlider(Qt.Horizontal)
+        self.alpha_image = QSlider(Qt.Orientation.Horizontal)
         self.alpha_image_value = QLabel(
             f'{100*self.main.gui.alpha_image:.0f} %')
         self.alpha_image.setRange(0, 100)

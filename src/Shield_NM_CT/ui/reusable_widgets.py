@@ -7,11 +7,11 @@ User interface classes for different uses and reuses in Shield_NM_CT.
 """
 import os
 
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QIcon, QFont, QKeyEvent
-from PyQt5.QtWidgets import (
-    qApp, QWidget, QDialog, QDialogButtonBox, QVBoxLayout, QHBoxLayout, QFrame,
-    QToolBar, QAction, QComboBox, QRadioButton, QButtonGroup, QToolButton,
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QIcon, QFont, QKeyEvent, QAction
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QDialog, QDialogButtonBox, QVBoxLayout, QHBoxLayout,
+    QFrame, QToolBar, QComboBox, QRadioButton, QButtonGroup, QToolButton,
     QLabel, QPushButton, QLineEdit, QCheckBox, QDoubleSpinBox,
     QProgressDialog, QProgressBar, QStatusBar
     )
@@ -101,9 +101,9 @@ class InfoTool(QToolBar):
         dlg = QDialog(self.parent)
         dlg.setWindowTitle('Information')
         dlg.setWindowIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}logo.png'))
-        dlg.setWindowFlags(dlg.windowFlags() | Qt.CustomizeWindowHint)
+        dlg.setWindowFlags(dlg.windowFlags() | Qt.WindowType.CustomizeWindowHint)
         dlg.setWindowFlags(
-            dlg.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+            dlg.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
         dlg.infotext = QLabel(f"""<html><head/><body>
                 {self.html_body_text}
@@ -112,7 +112,7 @@ class InfoTool(QToolBar):
 
         vlo = QVBoxLayout()
         vlo.addWidget(dlg.infotext)
-        buttons = QDialogButtonBox.Ok
+        buttons = QDialogButtonBox.StandardButton.Ok
         dlg.buttonBox = QDialogButtonBox(buttons)
         dlg.buttonBox.accepted.connect(dlg.accept)
         vlo.addWidget(dlg.buttonBox)
@@ -150,7 +150,7 @@ class HLine(QFrame):
 
     def __init__(self):
         super().__init__()
-        self.setFrameShape(QFrame.HLine)
+        self.setFrameShape(QFrame.Shape.HLine)
         self.setLineWidth(1)
 
 
@@ -159,7 +159,7 @@ class VLine(QFrame):
 
     def __init__(self):
         super().__init__()
-        self.setFrameShape(QFrame.VLine)
+        self.setFrameShape(QFrame.Shape.VLine)
         self.setLineWidth(1)
 
 
@@ -169,7 +169,7 @@ class ProgressBar(QProgressBar):
     def __init__(self, parent_widget):
         super().__init__(parent_widget)
         self
-        self.setAlignment(Qt.AlignCenter)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setStyleSheet(
             """
             QProgressBar {
@@ -189,10 +189,10 @@ class ProgressModal(QProgressDialog):
     def __init__(self, text, cancel_text, start, stop, parent,
                  minimum_duration=200, hide_cancel=False):
         super().__init__(text, cancel_text, start, stop, parent)
-        self.setWindowModality(Qt.WindowModal)
-        self.setWindowFlags(self.windowFlags() | Qt.CustomizeWindowHint)
+        self.setWindowModality(Qt.WindowModality.WindowModal)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.CustomizeWindowHint)
         self.setWindowFlags(
-            self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+            self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
         self.setWindowTitle('Wait while processing...')
         self.setWindowIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}logo.png'))
         self.setMinimumDuration(minimum_duration)
@@ -213,7 +213,7 @@ class ProgressModal(QProgressDialog):
             """
             )
         self.sub_interval = 0  # used to communicate subprosess range within setRange
-        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
 class ToolBarBrowse(QToolBar):
     """Toolbar for reuse with search button."""
@@ -271,7 +271,7 @@ class ToolBarTableExport(QToolBar):
         """
         super().__init__()
 
-        self.setOrientation(Qt.Vertical)
+        self.setOrientation(Qt.Orientation.Vertical)
         self.parent = parent
         self.parameters_output = parameters_output
         self.flag_edit = flag_edit
@@ -460,7 +460,7 @@ class StatusBar(QStatusBar):
         self.setStyleSheet("QStatusBar{padding-left: 8px;}")
         self.default_color = self.palette().window().color().name()
         self.message = QLabel('')
-        self.message.setAlignment(Qt.AlignCenter)
+        self.message.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.addWidget(self.message, 1)
         self.timer = QTimer()
         self.timer.setSingleShot(True)
@@ -478,14 +478,14 @@ class StatusBar(QStatusBar):
             self.timer.start(timeout)
         else:
             self.timer.start()
-        qApp.processEvents()
+        QApplication.instance().processEvents()
 
     def clearMessage(self):
         """Reset background and clear message."""
         self.setStyleSheet(
             "QStatusBar{background:" + self.default_color + ";}")
         self.message.setText('')
-        qApp.processEvents()
+        QApplication.instance().processEvents()
 
 
 class StatusLabel(QWidget):
@@ -499,7 +499,7 @@ class StatusLabel(QWidget):
         lo = QHBoxLayout()
         self.message = QLabel('')
         self.message.setStyleSheet("QLabel{padding-left: 8px;}")
-        self.message.setAlignment(Qt.AlignCenter)
+        self.message.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setLayout(lo)
         lo.addWidget(self.message)
 
@@ -507,14 +507,14 @@ class StatusLabel(QWidget):
         """Set background color when message is shown."""
         self.setStyleSheet("QWidget{background-color:#6e94c0;}")
         self.message.setText(txt)
-        qApp.processEvents()
+        QApplication.instance().processEvents()
 
     def clearMessage(self):
         """Reset background and clear message."""
         self.setStyleSheet(
             "QWidget{background-color:" + self.default_color + ";}")
         self.message.setText('')
-        qApp.processEvents()
+        QApplication.instance().processEvents()
 
 
 class TextCell(QLineEdit):
@@ -540,7 +540,7 @@ class TextCell(QLineEdit):
     def keyReleaseEvent(self, event):
         """Avoid pressed return trigger get_pos from InputTab (ui_main)."""
         if isinstance(event, QKeyEvent):
-            if event.key() == Qt.Key_Return:
+            if event.key() == Qt.Key.Key_Return:
                 pass
             else:
                 super().keyReleaseEvent(event)
@@ -588,7 +588,7 @@ class CellSpinBox(QDoubleSpinBox):
     def keyReleaseEvent(self, event):
         """Avoid pressed return trigger get_pos from InputTab (ui_main)."""
         if isinstance(event, QKeyEvent):
-            if event.key() == Qt.Key_Return:
+            if event.key() == Qt.Key.Key_Return:
                 pass
             else:
                 super().keyReleaseEvent(event)
@@ -614,7 +614,7 @@ class InputCheckBox(QCheckBox):
     def keyReleaseEvent(self, event):
         """Avoid pressed return trigger get_pos from InputTab (ui_main)."""
         if isinstance(event, QKeyEvent):
-            if event.key() == Qt.Key_Return:
+            if event.key() == Qt.Key.Key_Return:
                 pass
             else:
                 super().keyReleaseEvent(event)
@@ -642,7 +642,7 @@ class CellCombo(QComboBox):
     def keyReleaseEvent(self, event):
         """Avoid pressed return trigger get_pos from InputTab (ui_main)."""
         if isinstance(event, QKeyEvent):
-            if event.key() == Qt.Key_Return:
+            if event.key() == Qt.Key.Key_Return:
                 pass
             else:
                 super().keyReleaseEvent(event)
@@ -667,7 +667,7 @@ class ColorCell(QLabel):
     def keyReleaseEvent(self, event):
         """Avoid pressed return trigger get_pos from InputTab (ui_main)."""
         if isinstance(event, QKeyEvent):
-            if event.key() == Qt.Key_Return:
+            if event.key() == Qt.Key.Key_Return:
                 pass
             else:
                 super().keyReleaseEvent(event)

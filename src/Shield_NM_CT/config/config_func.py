@@ -11,8 +11,7 @@ from time import time, ctime
 from dataclasses import asdict
 
 import yaml
-from PyQt5.QtCore import QFile, QIODevice, QTextStream
-from PyQt5.QtWidgets import QMessageBox, QFileDialog
+from PyQt6.QtWidgets import QMessageBox, QFileDialog
 
 # Shield_NM_CT block block start
 from Shield_NM_CT.config.Shield_NM_CT_constants import (
@@ -43,17 +42,17 @@ def verify_config_folder(widget):
         quest = '''Config folder not specified.
         Do you want to locate or initate a config folder now?'''
         msg_box = QMessageBox(
-            QMessageBox.Question,
+            QMessageBox.Icon.Question,
             'Proceed?', quest,
-            buttons=QMessageBox.Yes | QMessageBox.No,
+            buttons=QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             parent=widget
             )
-        res = msg_box.exec_()
-        if res == QMessageBox.Yes:
+        res = msg_box.exec()
+        if res == QMessageBox.StandardButton.Yes:
             proceed = True
         if proceed:
             dlg = QFileDialog()
-            dlg.setFileMode(QFileDialog.Directory)
+            dlg.setFileMode(QFileDialog.FileMode.Directory)
             if dlg.exec():
                 fname = dlg.selectedFiles()
                 os.environ[ENV_CONFIG_FOLDER] = fname[0]
@@ -534,10 +533,10 @@ def import_settings(import_main):
     return any_same_name
 
 
-def get_icon_path(user_pref_dark_mode):
+def get_icon_path(dark_mode):
     """Get path for icons depending on darkmode settings."""
     path_icons = ':/icons/'
-    if user_pref_dark_mode:
+    if dark_mode:
         path_icons = ':/icons_darkmode/'
 
     return path_icons

@@ -11,12 +11,12 @@ import numpy as np
 from time import time
 from io import BytesIO
 
-from PyQt5.QtCore import Qt, QItemSelectionModel, QFile
-from PyQt5.QtGui import QIcon, QColor
-from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
+from PyQt6.QtCore import Qt, QItemSelectionModel, QFile, QIODevice
+from PyQt6.QtGui import QIcon, QColor, QAction
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QAbstractItemView,
     QStackedWidget, QGroupBox, QToolBar, QLineEdit,
-    QLabel, QPushButton, QButtonGroup, QRadioButton, QAction, QCheckBox,
+    QLabel, QPushButton, QButtonGroup, QRadioButton, QCheckBox,
     QComboBox, QDoubleSpinBox, QInputDialog, QColorDialog, QTableWidget,
     QDialogButtonBox, QMessageBox
     )
@@ -170,7 +170,7 @@ class CTmapCanvas(FigureCanvasQTAgg):
         self.overlay = None
 
         stream = QFile(':/icons/cor.png')
-        if stream.open(QFile.ReadOnly):
+        if stream.open(QIODevice.OpenModeFlag.ReadOnly):
             data = stream.readAll()
             stream.close()
             self.background = mpl.image.imread(BytesIO(data))
@@ -547,7 +547,7 @@ class ShieldDataWidget(StackWidget):
         self.gb_source_type.setLayout(hlo)
 
         self.toolbar_kV_source = QToolBar()
-        self.toolbar_kV_source.setOrientation(Qt.Vertical)
+        self.toolbar_kV_source.setOrientation(Qt.Orientation.Vertical)
         self.act_add_kV_source = QAction(
             QIcon(f'{os.environ[ENV_ICON_PATH]}add.png'), 'Add kV source', self)
         self.act_add_kV_source.triggered.connect(self.add_kV_source)
@@ -976,7 +976,8 @@ class ColormapSettingsWidget(StackWidget):
 
         self.table = QTableWidget(1, 3)
         self.table.setMinimumHeight(250)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
+        self.table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection)
         self.table_headers = [
             ['For dose higher than', 'Color', 'Color code'],
             ['For doserate higher than', 'Color', 'Color code'],
@@ -990,7 +991,7 @@ class ColormapSettingsWidget(StackWidget):
         self.add_cell_widgets(0)
 
         self.table_toolbar = QToolBar()
-        self.table_toolbar.setOrientation(Qt.Vertical)
+        self.table_toolbar.setOrientation(Qt.Orientation.Vertical)
 
         self.colorbar = uir.ColorBar()
         self.txt_colorbar = QLineEdit('')
@@ -1181,7 +1182,7 @@ class ColormapSettingsWidget(StackWidget):
         """Set focus on selected row and col."""
         index = self.table.model().index(row, col)
         self.table.selectionModel().select(
-            index, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
+            index, QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows)
         self.active_row = row
 
     def cell_selection_changed(self, row, col):
@@ -1288,11 +1289,12 @@ class ColormapSettingsWidget(StackWidget):
                 self.templates[tempno].cmax = cmax
         else:  # table
             values = np.array([row[0] for row in self.table_list])
-            orderdiff = np.diff(np.argsort(values))
-            if np.min(orderdiff) < 1 or np.max(orderdiff) > 1:
-                ok_save = False
-                msg = 'Values need to ascending.'
-                QMessageBox.warning(self, 'Failed saving settings', msg)
+            if values.size > 1:
+                orderdiff = np.diff(np.argsort(values))
+                if np.min(orderdiff) < 1 or np.max(orderdiff) > 1:
+                    ok_save = False
+                    msg = 'Values need to be ascending.'
+                    QMessageBox.warning(self, 'Failed saving settings', msg)
         if ok_save:
             ok_save, path = cff.save_settings(
                 self.templates, fname=self.fname)
@@ -1329,7 +1331,7 @@ class CmapSelectDialog(ShieldDialog):
         hlo_buttons = QHBoxLayout()
         vlo.addLayout(hlo_buttons)
 
-        buttons = QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+        buttons = QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         self.buttonBox = QDialogButtonBox(buttons)
         self.buttonBox.accepted.connect(self.accept)
         self.buttonBox.rejected.connect(self.reject)

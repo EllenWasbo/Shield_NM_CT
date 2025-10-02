@@ -91,6 +91,59 @@ def test_simple_project_oblique_90(qtbot):
     assert expected_dose_values == dose_values
 
 
+def test_siemens_CT(qtbot):
+    project_path = path_tests / 'SiemensCT_verify'
+    main = MainWindow()
+    qtbot.addWidget(main)
+    main.open_project(path=project_path)
+
+    main.calculate_dose()
+    table_list = main.points_tab.get_table_as_list()
+    dose_values = [float(row[-2]) for row in table_list[1:-1]]
+    expected_dose_values = [2.698, 3.6, 4.1997, 4.1986,
+                            2.521, 5.5385, 7.2, 7.4641,
+                            0.7052, 5.6723, 14.4, 16.7942,
+                            0.328, 0.656, 22.6894, 0.0,
+                            0.3644, 0.82, 0.0, 0.0,
+                            0.9464, 5.8844, 34.51, 0.0,
+                            3.523, 8.6275, 14.7264, 14.625,
+                            3.8344, 6.0, 6.5638, 6.5,
+                            3.12, 3.6816, 3.6825, 3.6562,
+                            2.2941, 2.3642, 2.352, 2.34,
+                            1.6363, 1.641, 1.6312, 1.625,
+                            1.2057, 1.204, 1.1973]
+    assert expected_dose_values == dose_values
+
+    main.CTsources_tab.table_list[0][3] = 90  # rotate 90 degrees
+    main.calculate_dose()
+    table_list = main.points_tab.get_table_as_list()
+    dose_values = [float(row[-2]) for row in table_list[1:-1]]
+    assert dose_values[16] == 6.5
+    assert dose_values[7] == 0.3644
+
+
+def test_siemens_CT_floor(qtbot):
+    project_path = path_tests / 'SiemensCT_floor_above_verify'
+    main = MainWindow()
+    qtbot.addWidget(main)
+    main.open_project(path=project_path)
+
+    main.calculate_dose()
+    table_list = main.points_tab.get_table_as_list()
+    dose_values = [float(row[-2]) for row in table_list[1:]]
+    expected_dose_values = [4.1986, 7.4641, 16.7942, 0.0, 0.0, 0.0, 14.625,
+                            6.5, 3.6562, 2.34, 1.625, 1.1939]
+    assert expected_dose_values == dose_values
+
+    # all c0,c1,c2 = 0 and no shielding
+    main.gui.current_floor = 0  # above
+    main.general_values.h1 = 1.
+    main.sum_dose_days()
+    table_list = main.points_tab.get_table_as_list()
+    dose_center = float(table_list[5][-2])
+    assert dose_center == 0.82  # same as 1m left (shaded by gantry)
+
+
 def test_start_settings(qtbot):
     main = MainWindow()
     qtbot.addWidget(main)

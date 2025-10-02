@@ -7,11 +7,11 @@
 
 import os
 
-from PyQt5.QtGui import QIcon, QPixmap
-from PyQt5 import QtCore
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (
-    QApplication, qApp, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox,
+from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6 import QtCore
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QApplication, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox,
     QGroupBox, QButtonGroup, QDialogButtonBox, QSpinBox,
     QLabel, QRadioButton, QCheckBox, QFileDialog
     )
@@ -32,14 +32,14 @@ class ShieldDialog(QDialog):
     def __init__(self):
         super().__init__()
         self.setWindowIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}logo.png'))
-        self.setWindowFlags(self.windowFlags() | Qt.CustomizeWindowHint)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.CustomizeWindowHint)
         self.setWindowFlags(
-            self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+            self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
     def start_wait_cursor(self):
         """Block mouse events by wait cursor."""
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        qApp.processEvents()
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        QApplication.instance().processEvents()
 
     def stop_wait_cursor(self):
         """Return to normal mouse cursor after wait cursor."""
@@ -55,7 +55,7 @@ class AboutDialog(ShieldDialog):
         self.setWindowTitle("Shield NM CT")
 
         layout = QVBoxLayout()
-        layout.setAlignment(QtCore.Qt.AlignCenter)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         layout.addSpacing(20)
         logo = QLabel()
         im = QPixmap(f'{os.environ[ENV_ICON_PATH]}logo_128.png')
@@ -89,8 +89,8 @@ class AboutDialog(ShieldDialog):
         layout.addWidget(label)
 
         buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok,
-            QtCore.Qt.Horizontal, self)
+            QDialogButtonBox.StandardButton.Ok,
+            QtCore.Qt.Orientation.Horizontal, self)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addSpacing(20)
@@ -108,7 +108,7 @@ class StartUpDialog(ShieldDialog):
         self.setWindowTitle("Welcome to Shield_NM_CT")
 
         layout = QVBoxLayout()
-        layout.setAlignment(QtCore.Qt.AlignCenter)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         layout.addSpacing(20)
         logo = QLabel()
         im = QPixmap(':/icons/logo_128.png')
@@ -168,8 +168,8 @@ class StartUpDialog(ShieldDialog):
         layout.addStretch()
 
         buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok,
-            QtCore.Qt.Horizontal, self)
+            QDialogButtonBox.StandardButton.Ok,
+            QtCore.Qt.Orientation.Horizontal, self)
         buttons.accepted.connect(self.press_ok)
         buttons.rejected.connect(self.reject)
         layout.addSpacing(20)
@@ -197,7 +197,7 @@ class StartUpDialog(ShieldDialog):
                 locate = False
         if locate:
             dlg = QFileDialog()
-            dlg.setFileMode(QFileDialog.Directory)
+            dlg.setFileMode(QFileDialog.FileMode.Directory)
             if dlg.exec():
                 fname = dlg.selectedFiles()
                 config_folder = os.path.normpath(fname[0])
@@ -248,7 +248,7 @@ class HeightsDialog(ShieldDialog):
         self.setWindowTitle("Shield NM CT information")
 
         layout = QVBoxLayout()
-        layout.setAlignment(QtCore.Qt.AlignCenter)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         layout.addSpacing(20)
         logo = QLabel()
         im = QPixmap(f'{os.environ[ENV_ICON_PATH]}heights.png')
@@ -267,8 +267,8 @@ class HeightsDialog(ShieldDialog):
         layout.addWidget(label)
 
         buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok,
-            QtCore.Qt.Horizontal, self)
+            QDialogButtonBox.StandardButton.Ok,
+            QtCore.Qt.Orientation.Horizontal, self)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addSpacing(20)
@@ -326,7 +326,7 @@ class EditAnnotationsDialog(ShieldDialog):
         self.spin_snap_radius.setValue(snap_radius)
         fLO.addRow(QLabel('Snap radius'), self.spin_snap_radius)
 
-        buttons = QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+        buttons = QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         self.buttonBox = QDialogButtonBox(buttons)
         self.buttonBox.accepted.connect(self.accept)
         self.buttonBox.rejected.connect(self.reject)

@@ -9,9 +9,9 @@ from __future__ import annotations
 import os
 from time import ctime
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import (
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QStackedWidget,
     QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox,
     QLabel, QLineEdit, QPushButton, QSpinBox, QCheckBox,
@@ -52,8 +52,8 @@ class SettingsDialog(ShieldDialog):
         self.reset_dose = False  # True if changes should force recalculating dose
 
         self.setWindowTitle('Settings manager')
-        self.width1 = round(0.3 * self.main.gui.panel_width)
-        self.width2 = round(1.2 * self.main.gui.panel_width)
+        self.width1 = round(0.2 * self.main.gui.panel_width)
+        self.width2 = round(1.3 * self.main.gui.panel_width)
 
         hlo = QHBoxLayout()
         self.setLayout(hlo)
@@ -129,7 +129,7 @@ class SettingsDialog(ShieldDialog):
         """Update visible widget in stack when selection in tree change."""
         prevtxtitem = self.current_selected_txt
         item = self.tree_settings.indexFromItem(item)
-        txtitem = item.data(Qt.DisplayRole)
+        txtitem = item.data(Qt.ItemDataRole.DisplayRole)
 
         # Settings changed - saved? Go back to prev if regret leaving unchanged
         _, prev_widget = self.get_item_widget_from_txt(prevtxtitem)
@@ -170,8 +170,8 @@ class SettingsDialog(ShieldDialog):
             reply = QMessageBox.question(
                 self, 'Unsaved changes',
                 'Close and loose unsaved changes?',
-                QMessageBox.Yes, QMessageBox.No)
-            if reply == QMessageBox.Yes:
+                QMessageBox.StandardButton.Yes, QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
                 event.accept()
             else:
                 event.ignore()
@@ -195,7 +195,6 @@ class UserSettingsWidget(StackWidget):
 
         self.config_folder = QLineEdit()
         self.lbl_user_prefs_path = QLabel()
-        self.chk_dark_mode = QCheckBox()
         self.fontsize = QSpinBox()
         self.annotations_linethick = QSpinBox()
         self.annotations_fontsize = QSpinBox()
@@ -232,13 +231,6 @@ class UserSettingsWidget(StackWidget):
         hlo_fontsize.addWidget(QLabel('Set font size for GUI:'))
         hlo_fontsize.addWidget(self.fontsize)
         vlo_gui.addLayout(hlo_fontsize)
-        hlo_dark_mode = QHBoxLayout()
-        self.chk_dark_mode.clicked.connect(
-            lambda: self.flag_edit(True))
-        hlo_dark_mode.addWidget(QLabel('Dark mode'))
-        hlo_dark_mode.addWidget(self.chk_dark_mode)
-        hlo_dark_mode.addStretch()
-        vlo_gui.addLayout(hlo_dark_mode)
         vlo_gui.addWidget(QLabel('Restart to make changes affect GUI.'))
         gb_gui.setLayout(vlo_gui)
         vlo_1.addWidget(gb_gui)
@@ -280,7 +272,6 @@ class UserSettingsWidget(StackWidget):
         self.lbl_user_prefs_path.setText('User preferences saved in: ' + path)
         self.config_folder.setText(self.user_prefs.config_folder)
         self.fontsize.setValue(self.user_prefs.fontsize)
-        self.chk_dark_mode.setChecked(self.user_prefs.dark_mode)
         self.annotations_linethick.setValue(self.user_prefs.annotations_linethick)
         self.annotations_fontsize.setValue(self.user_prefs.annotations_fontsize)
         self.picker.setValue(self.user_prefs.picker)
@@ -295,7 +286,6 @@ class UserSettingsWidget(StackWidget):
             self.config_folder.text() != self.user_prefs.config_folder)
         self.user_prefs.config_folder = self.config_folder.text()
         self.user_prefs.fontsize = self.fontsize.value()
-        self.user_prefs.dark_mode = self.chk_dark_mode.isChecked()
         self.user_prefs.annotations_linethick = self.annotations_linethick.value()
         self.user_prefs.annotations_fontsize = self.annotations_fontsize.value()
         self.user_prefs.picker = self.picker.value()
@@ -309,7 +299,7 @@ class UserSettingsWidget(StackWidget):
             if config_folder_changed:
                 self.main.update_general_values()
         else:
-            QMessageBox.Warning(self, 'Warning',
+            QMessageBox.Icon.Warning(self, 'Warning',
                                 f'Failed to save changes to {path}')
 
 
@@ -380,7 +370,7 @@ class SharedSettingsWidget(StackWidget):
     def locate_config(self):
         """Browse to config folder."""
         dlg = QFileDialog()
-        dlg.setFileMode(QFileDialog.Directory)
+        dlg.setFileMode(QFileDialog.FileMode.Directory)
         if dlg.exec():
             config_folder = dlg.selectedFiles()[0]
             self.change_config_user_prefs(config_folder)

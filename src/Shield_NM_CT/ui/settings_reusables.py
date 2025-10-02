@@ -8,11 +8,11 @@ import os
 from time import time
 import copy
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import (
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon, QAction
+from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
-    QToolBar, QLabel, QAction,
+    QToolBar, QLabel,
     QListWidget, QInputDialog, QMessageBox, QFileDialog
     )
 
@@ -167,7 +167,7 @@ class StackWidget(QWidget):
             reciever of the path text
         """
         dlg = QFileDialog()
-        dlg.setFileMode(QFileDialog.Directory)
+        dlg.setFileMode(QFileDialog.FileMode.Directory)
         if widget.text() != '':
             dlg.setDirectory(widget.text())
         if dlg.exec():
@@ -332,7 +332,7 @@ class TempSelector(QWidget):
     def __init__(self, parent, editable=True):
         super().__init__()
         self.parent = parent
-        self.setFixedWidth(400)
+        self.setFixedWidth(round(0.3 * parent.main.gui.panel_width))
 
         self.vlo = QVBoxLayout()
         self.setLayout(self.vlo)
@@ -342,13 +342,14 @@ class TempSelector(QWidget):
         self.vlo.addWidget(uir.LabelItalic(self.parent.temp_alias.title()+'s'))
         hlo_list = QHBoxLayout()
         self.vlo.addLayout(hlo_list)
+        self.vlo.addStretch()
         self.list_temps = QListWidget()
         self.list_temps.currentItemChanged.connect(self.parent.update_clicked_template)
         hlo_list.addWidget(self.list_temps)
 
         if editable:
             self.toolbar = QToolBar()
-            self.toolbar.setOrientation(Qt.Vertical)
+            self.toolbar.setOrientation(Qt.Orientation.Vertical)
             hlo_list.addWidget(self.toolbar)
             self.act_clear = QAction(
                 QIcon(f'{os.environ[ENV_ICON_PATH]}clear.png'),
@@ -395,7 +396,7 @@ class TempSelector(QWidget):
 
     def keyPressEvent(self, event):
         """Accept Delete and arrow up/down key on list templates."""
-        if event.key() == Qt.Key_Delete:
+        if event.key() == Qt.Key.Key_Delete:
             self.delete()
         else:
             super().keyPressEvent(event)
@@ -512,8 +513,8 @@ class TempSelector(QWidget):
         else:
             res = QMessageBox.question(
                 self, 'Delete?', f'Delete selected {self.parent.temp_alias}?',
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-            if res == QMessageBox.Yes:
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+            if res == QMessageBox.StandardButton.Yes:
                 confirmed = True
             if confirmed:
                 self.parent.delete()

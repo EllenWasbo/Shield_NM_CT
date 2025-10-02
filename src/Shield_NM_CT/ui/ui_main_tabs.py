@@ -8,12 +8,12 @@ import numpy as np
 import copy
 import pandas as pd
 
-from PyQt5.QtGui import QIcon, QPixmap
-from PyQt5.QtCore import Qt, QItemSelectionModel
-from PyQt5.QtWidgets import (
+from PyQt6.QtGui import QIcon, QPixmap, QAction
+from PyQt6.QtCore import Qt, QItemSelectionModel
+from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QTableWidget, QPushButton, QLabel, QDoubleSpinBox, QCheckBox, QComboBox,
-    QAction, QToolBar, QMessageBox, QFileDialog
+    QToolBar, QMessageBox, QFileDialog, QAbstractItemView
     )
 from matplotlib.patches import Rectangle
 
@@ -33,7 +33,7 @@ class TableToolBar(QToolBar):
     def __init__(self, table):
         super().__init__()
 
-        self.setOrientation(Qt.Vertical)
+        self.setOrientation(Qt.Orientation.Vertical)
 
         act_delete = QAction('Delete', self)
         act_delete.setIcon(QIcon(f'{os.environ[ENV_ICON_PATH]}delete.png'))
@@ -97,7 +97,8 @@ class InputTab(QWidget):
         self.table = QTableWidget(1, 3)
         self.table.verticalHeader().setVisible(False)
         self.table.setMinimumHeight(500)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
+        self.table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection)
 
         self.table_list = []
         # table as list for easy access for computations, import/export
@@ -174,7 +175,7 @@ class InputTab(QWidget):
             dlg = messageboxes.MessageBoxWithDetails(
                 self, title='Warning',
                 msg='Missing position. Mark position on drawing with mouse.',
-                icon=QMessageBox.Warning)
+                icon=QMessageBox.Icon.Warning)
             dlg.exec()
 
     def update_current_source_annotation(self):
@@ -314,7 +315,7 @@ class InputTab(QWidget):
         """Set focus on selected row and col."""
         index = self.table.model().index(row, col)
         self.table.selectionModel().select(
-            index, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
+            index, QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows)
         self.active_row = row
 
     def cell_selection_changed(self, row, col):
@@ -523,7 +524,7 @@ class InputTab(QWidget):
                         self, title='Warnings',
                         msg=f'Found issues for imported file {path}',
                         info='See details',
-                        icon=QMessageBox.Warning,
+                        icon=QMessageBox.Icon.Warning,
                         details=log)
                     dlg.exec()
 
@@ -753,7 +754,7 @@ class ScaleTab(InputTab):
                 self, title='Warnings',
                 msg='Found issues for floor materials',
                 info='See details',
-                icon=QMessageBox.Warning,
+                icon=QMessageBox.Icon.Warning,
                 details=warn)
             dlg.exec()
 
@@ -793,7 +794,7 @@ class ScaleTab(InputTab):
                 self, title='Warnings',
                 msg='Found issues for selected materials',
                 info='See details',
-                icon=QMessageBox.Warning,
+                icon=QMessageBox.Icon.Warning,
                 details=warnings)
             dlg.exec()
 
@@ -1028,7 +1029,7 @@ class WallsTab(InputTab):
                 self, title='Warnings',
                 msg='Found issues for selected materials',
                 info='See details',
-                icon=QMessageBox.Warning,
+                icon=QMessageBox.Icon.Warning,
                 details=warnings)
             dlg.exec()
 
@@ -1369,7 +1370,7 @@ class NMsourcesTab(InputTab):
                 self, title='Warnings',
                 msg='Found issues for selected isotopes',
                 info='See details',
-                icon=QMessageBox.Warning,
+                icon=QMessageBox.Icon.Warning,
                 details=warnings)
             dlg.exec()
 
@@ -1551,7 +1552,7 @@ class CTsourcesTab(InputTab):
                 self, title='Warnings',
                 msg='Found issues for selected kV sources or dosemaps',
                 info='See details',
-                icon=QMessageBox.Warning,
+                icon=QMessageBox.Icon.Warning,
                 details=warnings)
             dlg.exec()
 
@@ -1692,7 +1693,7 @@ class OTsourcesTab(InputTab):
                 self, title='Warnings',
                 msg='Found issues for selected source types',
                 info='See details',
-                icon=QMessageBox.Warning,
+                icon=QMessageBox.Icon.Warning,
                 details=warnings)
             dlg.exec()
 
