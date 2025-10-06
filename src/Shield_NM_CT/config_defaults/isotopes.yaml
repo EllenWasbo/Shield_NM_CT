@@ -11,7 +11,7 @@ gamma_ray_constant: 0.0195
 patient_constant: 0.0075
 ---
 label: I-123
-half_life: 13
+half_life: 13.22
 half_life_unit: hours
 gamma_ray_constant: 0.041
 patient_constant: 0.015

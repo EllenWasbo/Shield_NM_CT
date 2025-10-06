@@ -557,13 +557,26 @@ class MainWindow(QMainWindow):
                 if self.gui.current_tab == 'Areas':
                     if self.wVisual.overlay_text() == 'None':
                         self.wVisual.btns_overlay.button(1).setChecked(True)
-                        #self.areas_tab.update_occ_map()
                         self.wVisual.overlay_selections_changed()
+                    self.wVisual.btns_annotate.button(2).setChecked(False)
+                    self.wVisual.btns_annotate.button(3).setChecked(False)
+                    self.wVisual.annotate_selections_changed()
                 elif self.gui.current_tab == 'Walls':
+                    self.wVisual.btns_annotate.button(1).setChecked(False)
+                    self.wVisual.btns_annotate.button(2).setChecked(True)
+                    self.wVisual.btns_annotate.button(3).setChecked(True)
+                    self.wVisual.annotate_selections_changed()
                     if 'Occ' in self.wVisual.overlay_text():
                         self.wVisual.btns_overlay.button(0).setChecked(True)
                         self.wVisual.overlay_selections_changed()
                     self.gui.rectify = self.walls_tab.rectify.isChecked()
+                elif self.gui.current_tab == 'Scale':
+                    self.wVisual.btns_annotate.button(0).setChecked(True)
+                    self.wVisual.annotate_selections_changed()
+                    for i, p in enumerate(self.wFloorDisplay.canvas.ax.lines):
+                        if p.get_gid() == 'scale':
+                            self.current_artist = p
+                            break
                 elif ('source' in self.gui.current_tab
                       or 'point' in self.gui.current_tab):
                     if 'Occ' in self.wVisual.overlay_text():
@@ -908,6 +921,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                                      'k--', linewidth=2., gid='line_temp')
                 else:
                     pass
+        '''
         elif event.button.name == 'RIGHT':
             if self.main.gui.current_tab in ['Areas', 'Scale', 'Walls']:
                 self.popMenu = QMenu(self)
@@ -919,6 +933,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                             self, triggered=self.reset_hover_pick))
                 cursor = QCursor()
                 self.popMenu.popup(cursor.pos())
+        '''
 
     def try_snap(self, event):
         """Try to snap to hovered area or wall while editing/drawing new wall/area."""
@@ -978,7 +993,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                         if self.main.gui.current_tab == 'Walls':
                             self.try_snap(event)
                         if self.drag_handle:
-                            self.update_wall_on_drag()
+                            self.update_line_on_drag()
                         else:
                             for p in self.ax.lines:
                                 if p.get_gid() == 'line_temp':
@@ -1005,7 +1020,7 @@ class FloorCanvas(FigureCanvasQTAgg):
             if (
                     self.handles_visible is False
                     and event.inaxes == self.ax
-                    and self.main.gui.current_tab != 'Scale'
+                    #and self.main.gui.current_tab != 'Scale'
                     ):
                 prev_hovered_artist = self.hovered_artist
                 hit = False
@@ -1016,6 +1031,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                         if contain_event and 'handle' not in gid:
                             self.hovered_artist = patch
                             hit = True
+                            #self.recent_pick = False
                             break
                     if hit is False:
                         self.hovered_artist = None
@@ -1043,6 +1059,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                         if self.main.gui.current_tab == 'Areas':
                             prev_hovered_artist.set_linewidth(
                                 self.main.gui.annotations_linethick)
+                            prev_hovered_artist.set_hatch('')
                         elif self.main.gui.current_tab == 'Walls':
                             try:
                                 curr_lw = plt.getp(prev_hovered_artist, 'linewidth')
@@ -1071,6 +1088,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                         if self.main.gui.current_tab == 'Areas':
                             self.hovered_artist.set_linewidth(
                                 self.main.gui.annotations_linethick + 2)
+                            self.hovered_artist.set_hatch('x')
                         elif self.main.gui.current_tab == 'Walls':
                             try:
                                 curr_lw = plt.getp(self.hovered_artist, 'linewidth')
@@ -1157,7 +1175,8 @@ class FloorCanvas(FigureCanvasQTAgg):
             self.draw_idle()
 
     def prepare_drag(self):
-        if self.handles_visible is False:
+        if self.handles_visible is False and self.current_artist:
+            self.info_text.set_visible(False)  # avoid conflict with info
             gid = self.current_artist.get_gid()
             prefix = ''
             if '_' in gid:
@@ -1168,7 +1187,18 @@ class FloorCanvas(FigureCanvasQTAgg):
                 row = int(gid)
             except ValueError:
                 row = None
-            if row is not None:
+
+            handles = []
+            if gid == 'scale':
+                if self.main.gui.current_tab == 'Scale':
+                    self.current_artist.set_picker(False)
+                    xs, ys = self.current_artist.get_data()
+                    half = self.main.gui.handle_size // 2
+                    handles = [  # gid, pos
+                        ('handle_start', (xs[0]-half, ys[0]-half)),
+                        ('handle_end', (xs[1]-half, ys[1]-half))
+                        ]
+            elif row is not None:
                 self.main.tabs.currentWidget().select_row_col(row, 1)
                 # Create handle_ to drag
                 if prefix == 'areas' and self.main.gui.current_tab == 'Areas':
@@ -1201,85 +1231,39 @@ class FloorCanvas(FigureCanvasQTAgg):
                 else:
                     handles = []
 
-                for handle in handles:
-                    self.ax.add_patch(
-                        patches.Rectangle(
-                            handle[1],
-                            self.main.gui.handle_size, self.main.gui.handle_size,
-                            edgecolor='black', facecolor='white',
-                            linewidth=2, fill=True, picker=True,
-                            gid=handle[0])
-                        )
-                    self.handles_visible = True
-                    self.recent_pick = True
-                    self.draw_idle()
+            for handle in handles:
+                self.ax.add_patch(
+                    patches.Rectangle(
+                        handle[1],
+                        self.main.gui.handle_size, self.main.gui.handle_size,
+                        edgecolor='black', facecolor='white',
+                        linewidth=2, fill=True, picker=True,
+                        gid=handle[0])
+                    )
+                self.handles_visible = True
+                self.recent_pick = True
+                self.draw_idle()
 
     def on_pick(self, event):
         """When mouse picking objects."""
-        if self.current_artist != event.artist:
+        if self.current_artist != event.artist: # and self.recent_pick is False:
             self.current_artist = event.artist
+            #self.recent_pick = True
             gid = self.current_artist.get_gid()
             if 'handle' in gid:
                 self.drag_handle = True
             elif self.handles_visible is False:
-                prefix = ''
-                """
-                if '_' in gid:
-                    gid_split = gid.split('_')
-                    gid = gid_split[1]
-                    prefix = gid_split[0]
-                """
                 try:
-                    row = int(gid)
-                except ValueError:
+                    row = int(gid.split('_')[1])
+                except (ValueError, IndexError):
                     row = None
                 if row is not None:
                     self.main.tabs.currentWidget().select_row_col(row, 1)
-                    """
-                    # Create handle_ to drag
-                    if prefix == 'areas' and self.main.gui.current_tab == 'Areas':
-                        self.current_artist.set_picker(False)
-                        #self.set_picker_areas(False)
-                        [xmin, ymin], [xmax, ymax] = (
-                            self.current_artist.get_bbox().get_points())
-                        xmid = (xmax + xmin) // 2
-                        ymid = (ymax + ymin) // 2
-                        half = self.main.gui.handle_size // 2
-                        handles = [  # gid, pos
-                            ('handle_left', (xmin-half, ymid-half)),
-                            ('handle_top', (xmid-half, ymin-half)),
-                            ('handle_right', (xmax-half, ymid-half)),
-                            ('handle_bottom', (xmid-half, ymax-half))
-                             ]
-                    elif prefix == 'walls' and self.main.gui.current_tab == 'Walls':
-                        self.current_artist.set_picker(False)
-                        self.current_artist.set_markeredgewidth(0)
-                        xs, ys = self.current_artist.get_data()
-                        half = self.main.gui.handle_size // 2
-                        handles = [  # gid, pos
-                            ('handle_start', (xs[0]-half, ys[0]-half)),
-                            ('handle_end', (xs[1]-half, ys[1]-half))
-                            ]
-                    elif hasattr(self.main.tabs.currentWidget(), 'modality'):
-                        if prefix == self.main.tabs.currentWidget().modality:
-                            self.sourcepos_highlight()
-                        handles = []
-                    else:
-                        handles = []
-
-                    for handle in handles:
-                        self.ax.add_patch(
-                            patches.Rectangle(
-                                handle[1],
-                                self.main.gui.handle_size, self.main.gui.handle_size,
-                                edgecolor='black', facecolor='white',
-                                linewidth=2, fill=True, picker=True,
-                                gid=handle[0])
-                            )
-                        self.handles_visible = True
-                        self.recent_pick = True
-                        self.draw_idle()
-                    """
+                    self.main.tabs.currentWidget().scroll_to_row(row)
+                    if self.main.gui.current_tab in ['Areas', 'Walls']:
+                        self.prepare_drag()
+                elif self.main.gui.current_tab == 'Scale':
+                    self.prepare_drag()
 
     def on_zoom_changed(self):
         """Redraw walls if real thickness."""
@@ -1302,12 +1286,17 @@ class FloorCanvas(FigureCanvasQTAgg):
         if self.hovered_artist:
             if self.main.gui.current_tab == 'Areas':
                 self.hovered_artist.set_picker(True)
+                try:
+                    self.hovered_artist.set_hatch('')
+                except AttributeError:
+                    pass
+            elif self.main.gui.current_tab in ['Scale', 'Walls']:
+                self.hovered_artist.set_picker(True)
             else:
                 self.hovered_artist.set_picker(self.main.gui.picker)
             self.hovered_artist = None
         self.current_artist = None
         self.handles_visible = False
-        #self.set_picker_areas(True)
         self.drag_handle = False
         self.info_text.set_text('')
         self.info_text.set_visible(False)
@@ -1327,18 +1316,27 @@ class FloorCanvas(FigureCanvasQTAgg):
             if self.hovered_artist is not None:
                 [x0, x1], [y0, y1] = self.hovered_artist.get_data()
                 pos_string = f'{x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}'
+        elif self.main.gui.current_tab == 'Scale':
+            if self.current_artist is not None:
+                [x0, x1], [y0, y1] = self.hovered_artist.get_data()
+                pos_string = f'{x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}'
         else:
             pos_string = f'{self.main.gui.x1:.0f}, {self.main.gui.y1:.0f}'
 
         if pos_string is not None:
-            self.main.tabs.currentWidget().table_list[active_row][2] = pos_string
-            w = self.main.tabs.currentWidget().table.cellWidget(active_row, 2)
+            col = 0 if self.main.gui.current_tab == 'Scale' else 2
+            self.main.tabs.currentWidget().table_list[
+                active_row][col] = pos_string
+            w = self.main.tabs.currentWidget().table.cellWidget(
+                active_row, col)
             w.setText(pos_string)
 
             if self.main.gui.current_tab == 'Areas':
                 self.main.areas_tab.update_occ_map()
             elif self.main.gui.current_tab == 'Walls':
                 self.main.walls_tab.update_wall_annotations()
+            elif self.main.gui.current_tab == 'Scale':
+                self.main.scale_tab.update_scale()
             elif ('source' in self.main.gui.current_tab
                   or 'point' in self.main.gui.current_tab):
                 self.sourcepos_highlight()
@@ -1422,7 +1420,7 @@ class FloorCanvas(FigureCanvasQTAgg):
             (x0, y0), width, height,
             edgecolor='red', fill=False, gid='area_highlight',
             linewidth=self.main.gui.annotations_linethick + 2,
-            linestyle='dotted')
+            linestyle='dotted', picker=True)
         if len(self.ax.patches) > 0:
             for i, p in enumerate(self.ax.patches):
                 if p.get_gid() == 'area_highlight':
@@ -1444,6 +1442,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                             active_wall = True
                     if active_wall:
                         line.set_markeredgewidth(3)
+                        self.hovered_artist = line
                     else:
                         line.set_markeredgewidth(0)
             except (ValueError, AttributeError):
@@ -1617,52 +1616,67 @@ class FloorCanvas(FigureCanvasQTAgg):
         hit_gid_pos : (bool, str, position or '')
             snapped wall or area
         """
-        width = round(self.main.gui.x1 - self.main.gui.x0)
-        height = round(self.main.gui.y1 - self.main.gui.y0)
+        proceed = True
+        try:
+            width = round(self.main.gui.x1 - self.main.gui.x0)
+            height = round(self.main.gui.y1 - self.main.gui.y0)
+        except TypeError:
+            proceed = False
 
-        if self.drag_handle:
-            gid_handle = self.current_artist.get_gid()
-            half = self.main.gui.handle_size // 2
-            gid_split = self.hovered_artist.get_gid().split('_')
-            row = int(gid_split[1])
-            x0, y0, w0, h0 = mini_methods.get_area_from_text(
-                self.main.areas_tab.table_list[row][2])
-            if gid_handle == 'handle_right':
-                w0 = w0 + width
-                self.current_artist.set_xy((x0 + w0 - half, y0 + h0 // 2 - half))
-            elif gid_handle == 'handle_left':
-                w0 = w0 - width
-                x0 = x0 + width
-                self.current_artist.set_xy((x0 - half, y0 + h0 // 2 - half))
-            elif gid_handle == 'handle_top':
-                h0 = h0 - height
-                y0 = y0 + height
-                self.current_artist.set_xy((x0 + w0 // 2 - half, y0 - half))
+        if proceed:
+            if self.drag_handle:
+                gid_handle = self.current_artist.get_gid()
+                half = self.main.gui.handle_size // 2
+                gid_split = self.hovered_artist.get_gid().split('_')
+                row = int(gid_split[1])
+                x0, y0, w0, h0 = mini_methods.get_area_from_text(
+                    self.main.areas_tab.table_list[row][2])
+                if gid_handle == 'handle_right':
+                    w0 = w0 + width
+                    self.current_artist.set_xy(
+                        (x0 + w0 - half, y0 + h0 // 2 - half))
+                elif gid_handle == 'handle_left':
+                    w0 = w0 - width
+                    x0 = x0 + width
+                    self.current_artist.set_xy(
+                        (x0 - half, y0 + h0 // 2 - half))
+                elif gid_handle == 'handle_top':
+                    h0 = h0 - height
+                    y0 = y0 + height
+                    self.current_artist.set_xy(
+                        (x0 + w0 // 2 - half, y0 - half))
+                else:
+                    h0 = h0 + height
+                    self.current_artist.set_xy(
+                        (x0 + w0 // 2 - half, y0 + h0 - half))
+                self.hovered_artist.set_xy((x0, y0))
+                self.hovered_artist.set_width(w0)
+                self.hovered_artist.set_height(h0)
             else:
-                h0 = h0 + height
-                self.current_artist.set_xy((x0 + w0 // 2 - half, y0 + h0 - half))
-            self.hovered_artist.set_xy((x0, y0))
-            self.hovered_artist.set_width(w0)
-            self.hovered_artist.set_height(h0)
-        else:
-            self.area_temp.set_width(np.abs(width))
-            self.area_temp.set_height(np.abs(height))
-            self.area_temp.set_xy((
-                min(self.main.gui.x0, self.main.gui.x1),
-                min(self.main.gui.y0, self.main.gui.y1)))
-        self.draw_idle()
+                self.area_temp.set_width(np.abs(width))
+                self.area_temp.set_height(np.abs(height))
+                self.area_temp.set_xy((
+                    min(self.main.gui.x0, self.main.gui.x1),
+                    min(self.main.gui.y0, self.main.gui.y1)))
+            self.draw_idle()
 
-    def update_wall_on_drag(self):
+    def update_line_on_drag(self):
         """Update GUI when picked wall handles dragged."""
         if self.drag_handle and self.hovered_artist is not None:
             gid_handle = self.current_artist.get_gid()
             half = self.main.gui.handle_size // 2
             xnow = round(self.main.gui.x1)
             ynow = round(self.main.gui.y1)
-            gid_split = self.hovered_artist.get_gid().split('_')
-            row = int(gid_split[1])
-            x0, y0, x1, y1 = mini_methods.get_wall_from_text(
-                self.main.walls_tab.table_list[row][2])
+            try:
+                gid_split = self.hovered_artist.get_gid().split('_')
+                row = int(gid_split[1])
+                x0, y0, x1, y1 = mini_methods.get_wall_from_text(
+                    self.main.walls_tab.table_list[row][2])
+            except IndexError:  # scale
+                x0 = self.main.gui.scale_start[0]
+                y0 = self.main.gui.scale_start[1]
+                x1 = self.main.gui.scale_end[0]
+                y1 = self.main.gui.scale_end[1]
             start = True if 'start' in gid_handle else False
             if start:
                 x0, y0 = xnow, ynow
@@ -2108,6 +2122,8 @@ class VisualizationWidget(QWidget):
         self.setLayout(self.hlo)
 
         self.gb_annotate = QGroupBox('Annotate...')
+        self.gb_annotate.setCheckable(True)
+        self.gb_annotate.toggled.connect(self.annotate_all_none)
         self.gb_annotate.setFont(uir.FontItalic())
         self.gb_annotate.setMinimumWidth(round(0.15*self.main.gui.panel_width))
         self.btns_annotate = QButtonGroup()
@@ -2122,7 +2138,8 @@ class VisualizationWidget(QWidget):
         self.gb_annotate.setLayout(vlo)
         self.hlo.addWidget(self.gb_annotate)
 
-        self.overlay_options = ['None', 'Occupancy factors', 'Dose', 'Max dose rate NM']
+        self.overlay_options = ['None', 'Occupancy factors', 'Dose',
+                                'Max dose rate NM']
         self.gb_overlay = QGroupBox('Color overlay...')
         self.gb_overlay.setFont(uir.FontItalic())
         self.gb_overlay.setMinimumWidth(round(0.15*self.main.gui.panel_width))
@@ -2187,6 +2204,11 @@ class VisualizationWidget(QWidget):
     def annotate_texts(self):
         """Get selected annotation options as list of str."""
         return [btn.text() for btn in self.btns_annotate.buttons() if btn.isChecked()]
+
+    def annotate_all_none(self):
+        for btn in self.btns_annotate.buttons():
+            btn.setChecked(self.gb_annotate.isChecked())
+        self.annotate_selections_changed()
 
     def annotate_selections_changed(self):
         """Update display when annotation selections change."""

@@ -13,7 +13,7 @@ from PyQt6.QtCore import Qt, QItemSelectionModel
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QTableWidget, QPushButton, QLabel, QDoubleSpinBox, QCheckBox, QComboBox,
-    QToolBar, QMessageBox, QFileDialog, QAbstractItemView
+    QToolBar, QMessageBox, QFileDialog, QAbstractItemView, QTableWidgetItem
     )
 from matplotlib.patches import Rectangle
 
@@ -96,9 +96,13 @@ class InputTab(QWidget):
         self.vlo.addLayout(self.hlo)
         self.table = QTableWidget(1, 3)
         self.table.verticalHeader().setVisible(False)
-        self.table.setMinimumHeight(500)
+        self.table.setMinimumHeight(300)
         self.table.setSelectionMode(
             QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self.table.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
 
         self.table_list = []
         # table as list for easy access for computations, import/export
@@ -317,6 +321,16 @@ class InputTab(QWidget):
         self.table.selectionModel().select(
             index, QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows)
         self.active_row = row
+        try:
+            self.table.cellWidget(row, col).setFocus()
+        except AttributeError:
+            pass
+
+    def scroll_to_row(self, row):
+        target_item = self.table.item(row, 0)
+        if target_item: # Check if the item exists
+            self.table.scrollToItem(target_item,
+                                    QAbstractItemView.ScrollHint.PositionAtCenter)
 
     def cell_selection_changed(self, row, col):
         """Cell widget got focus. Change active row and highlight."""
@@ -368,14 +382,13 @@ class InputTab(QWidget):
                     self.add_cell_widgets(0)
                     self.table.removeRow(1)
                     self.table_list = [copy.deepcopy(self.empty_row)]
-                    self.active_row = 0
+                    active_row = 0
                 else:
                     self.table.removeRow(row)
                     self.table_list.pop(row)
                     self.update_row_number(row, -1)
-                if self.label == 'Areas':
-                    self.update_occ_map()
-                self.select_row_col(row, 0)
+                    active_row = row - 1 if row > 0 else 0
+                self.select_row_col(active_row, 0)
             else:
                 row = -1
         return row
@@ -841,6 +854,8 @@ class AreasTab(InputTab):
 
     def add_cell_widgets(self, row):
         """Add cell widgets to the selected row (new row, default values)."""
+        item = QTableWidgetItem('')
+        self.table.setItem(row, 0, item)
         self.table.setCellWidget(row, 0, uir.InputCheckBox(self, row=row, col=0))
         self.table.setCellWidget(row, 1, uir.TextCell(self, row=row, col=1))
         self.table.setCellWidget(row, 2, uir.TextCell(self, row=row, col=2))
@@ -911,6 +926,8 @@ class AreasTab(InputTab):
         removed_row = super().delete_row()
         if removed_row > -1:
             self.update_occ_map()
+            if self.main.dose_dict:
+                self.main.reset_dose()  # TODO or update
 
     def add_row(self):
         """Add row after selected row (or as last row if none selected).
@@ -991,6 +1008,8 @@ class WallsTab(InputTab):
 
     def add_cell_widgets(self, row):
         """Add cell widgets to the selected row (new row, default values)."""
+        item = QTableWidgetItem('')
+        self.table.setItem(row, 0, item)
         self.table.setCellWidget(row, 0, uir.InputCheckBox(self, row=row, col=0))
         self.table.setCellWidget(row, 1, uir.TextCell(self, row=row, col=1))
         self.table.setCellWidget(row, 2, uir.TextCell(self, row=row, col=2))
@@ -1307,16 +1326,16 @@ class NMsourcesTab(InputTab):
         self.isotope_strings = [x.label for x in self.main.isotopes]
         self.table_list = [copy.deepcopy(self.empty_row)]
         self.active_row = 0
-        self.table.setColumnWidth(0, 10*self.main.gui.char_width)
-        self.table.setColumnWidth(1, 25*self.main.gui.char_width)
-        self.table.setColumnWidth(2, 15*self.main.gui.char_width)
-        self.table.setColumnWidth(3, 13*self.main.gui.char_width)
-        self.table.setColumnWidth(4, 13*self.main.gui.char_width)
+        self.table.setColumnWidth(0, 8*self.main.gui.char_width)
+        self.table.setColumnWidth(1, 20*self.main.gui.char_width)
+        self.table.setColumnWidth(2, 12*self.main.gui.char_width)
+        self.table.setColumnWidth(3, 12*self.main.gui.char_width)
+        self.table.setColumnWidth(4, 12*self.main.gui.char_width)
         self.table.setColumnWidth(5, 13*self.main.gui.char_width)
         self.table.setColumnWidth(6, 13*self.main.gui.char_width)
-        self.table.setColumnWidth(7, 22*self.main.gui.char_width)
-        self.table.setColumnWidth(8, 13*self.main.gui.char_width)
-        self.table.setColumnWidth(9, 17*self.main.gui.char_width)
+        self.table.setColumnWidth(7, 20*self.main.gui.char_width)
+        self.table.setColumnWidth(8, 12*self.main.gui.char_width)
+        self.table.setColumnWidth(9, 15*self.main.gui.char_width)
 
         self.table.verticalHeader().setVisible(False)
         self.add_cell_widgets(0)
@@ -1469,14 +1488,14 @@ class CTsourcesTab(InputTab):
         self.active_row = 0
         self.table.setColumnWidth(0, 8*self.main.gui.char_width)
         self.table.setColumnWidth(1, 20*self.main.gui.char_width)
-        self.table.setColumnWidth(2, 13*self.main.gui.char_width)
+        self.table.setColumnWidth(2, 12*self.main.gui.char_width)
         self.table.setColumnWidth(3, 12*self.main.gui.char_width)
         self.table.setColumnWidth(4, 17*self.main.gui.char_width)
-        self.table.setColumnWidth(5, 18*self.main.gui.char_width)
-        self.table.setColumnWidth(6, 18*self.main.gui.char_width)
-        self.table.setColumnWidth(7, 26*self.main.gui.char_width)
-        self.table.setColumnWidth(8, 15*self.main.gui.char_width)
-        self.table.setColumnWidth(9, 19*self.main.gui.char_width)
+        self.table.setColumnWidth(5, 17*self.main.gui.char_width)
+        self.table.setColumnWidth(6, 17*self.main.gui.char_width)
+        self.table.setColumnWidth(7, 24*self.main.gui.char_width)
+        self.table.setColumnWidth(8, 13*self.main.gui.char_width)
+        self.table.setColumnWidth(9, 15*self.main.gui.char_width)
 
         self.table.verticalHeader().setVisible(False)
         self.add_cell_widgets(0)

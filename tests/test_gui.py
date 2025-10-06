@@ -7,8 +7,6 @@ Tests on GUI.
 import os
 from pathlib import Path
 
-from pandas import read_clipboard
-
 from Shield_NM_CT.ui.ui_main import MainWindow
 from Shield_NM_CT.config.Shield_NM_CT_constants import (
     ENV_USER_PREFS_PATH, ENV_CONFIG_FOLDER, ENV_ICON_PATH)
@@ -89,6 +87,19 @@ def test_simple_project_oblique_90(qtbot):
     expected_dose_values = [8.1492, 8.1492, 0.8149, 8.1492, 
                             1.604, 0.1841, 0.1604, 0.1841]
     assert expected_dose_values == dose_values
+
+
+def test_CT_project(qtbot):
+    project_path = path_tests / 'CT_project'
+    main = MainWindow()
+    qtbot.addWidget(main)
+    main.open_project(path=project_path)
+
+    main.calculate_dose()
+    table_list = main.points_tab.get_table_as_list()
+    dose_values = [float(row[-2]) for row in table_list[1:]]
+    assert dose_values[1] == dose_values[0] * 0.5  # occ factor 0.5, symmetric
+    assert dose_values[3] < dose_values[2]  # shielded by wall
 
 
 def test_siemens_CT(qtbot):

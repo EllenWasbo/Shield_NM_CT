@@ -434,6 +434,8 @@ def get_dose_factors_NM(source_row, isotope):
         half_life = half_life / 60
     elif isotope.half_life_unit == 'days':
         half_life = half_life * 24
+    elif isotope.half_life_unit == 'years':
+        half_life = half_life * 24 * 365
 
     # doseconstant - decay and gammaray constant or damping in patient
     act_at_t1 = A0 * np.exp(-np.log(2) * t1 / half_life)

@@ -1,91 +1,28 @@
-kV_source: 'CT 120 kVp'
-material: Lead
-alpha: 2.246
-beta: 5.73
-gamma: 0.547
----
-kV_source: 'CT 140 kVp'
-material: Lead
-alpha: 2.009
-beta: 3.99
-gamma: 0.342
----
-kV_source: 'CT 120 kVp'
-material: Concrete
-alpha: 0.0383
-beta: 0.0142
-gamma: 0.658
----
-kV_source: 'CT 140 kVp'
-material: Concrete
-alpha: 0.0336
-beta: 0.0122
-gamma: 0.519
----
-isotope: 'F-18'
-material: Lead
-alpha: 0.15430
-beta: -0.04408
-gamma: 2.136
----
-isotope: 'F-18'
-material: Concrete
-alpha: 0.01539
-beta: -0.01161
-gamma: 2.0752
----
-isotope: 'Tc-99m'
-material: Lead
-hvl1: 0.4
-hvl2: 0.3
-tvl1: 1.1
-tvl2: 1.0
----
-isotope: 'Tc-99m'
-material: Concrete
-hvl1: 84.3
-hvl2: 30.5
-tvl1: 151.0
-tvl2: 83.2
----
-isotope: 'I-123'
-material: Lead
-hvl1: 0.059
-hvl2: 0.591
-tvl1: 1.4
-tvl2: 12.3
----
-isotope: 'I-123'
-material: Concrete
-hvl1: 58.9
-hvl2: 41.3
-tvl1: 144.5
-tvl2: 105.3
----
-isotope: 'I-131'
-material: Lead
-hvl1: 3.9
-hvl2: 3.1
-tvl1: 11.6
-tvl2: 16.8
----
-isotope: 'I-131'
-material: Concrete
-hvl1: 118
-hvl2: 49.8
-tvl1: 225.9
-tvl2: 134.1
----
-isotope: 'Lu-177'
-material: Lead
-hvl1: 0.8
-hvl2: 0.73
-tvl1: 2.5
-tvl2: 2.77
----
-isotope: 'Lu-177'
-material: Concrete
-hvl1: 98.9
-hvl2: 36.6
-tvl1: 179.1
-tvl2: 101.3
+{kV_source: CT 120 kVp, isotope: '', material: Lead, alpha: 2.246, beta: 5.73, gamma: 0.547,
+  hvl1: 0.0, hvl2: 0.0, tvl1: 0.0, tvl2: 0.0}
+--- {kV_source: CT 140 kVp, isotope: '', material: Lead, alpha: 2.009, beta: 3.99,
+  gamma: 0.342, hvl1: 0.0, hvl2: 0.0, tvl1: 0.0, tvl2: 0.0}
+--- {kV_source: CT 120 kVp, isotope: '', material: Concrete, alpha: 0.0383, beta: 0.0142,
+  gamma: 0.658, hvl1: 0.0, hvl2: 0.0, tvl1: 0.0, tvl2: 0.0}
+--- {kV_source: CT 140 kVp, isotope: '', material: Concrete, alpha: 0.0336, beta: 0.0122,
+  gamma: 0.519, hvl1: 0.0, hvl2: 0.0, tvl1: 0.0, tvl2: 0.0}
+--- {kV_source: '', isotope: F-18, material: Lead, alpha: 0.1543, beta: -0.04408,
+  gamma: 2.136, hvl1: 0.0, hvl2: 0.0, tvl1: 0.0, tvl2: 0.0}
+--- {kV_source: '', isotope: F-18, material: Concrete, alpha: 0.01539, beta: -0.01161,
+  gamma: 2.0752, hvl1: 0.0, hvl2: 0.0, tvl1: 0.0, tvl2: 0.0}
+--- {kV_source: '', isotope: Tc-99m, material: Lead, alpha: 0.0, beta: 0.0, gamma: 0.0,
+  hvl1: 0.36, hvl2: 0.31, tvl1: 1.06, tvl2: 0.94}
+--- {kV_source: '', isotope: Tc-99m, material: Concrete, alpha: 0.0, beta: 0.0, gamma: 0.0,
+  hvl1: 66.6, hvl2: 31.7, tvl1: 135.3, tvl2: 83.7}
+--- {kV_source: '', isotope: I-123, material: Lead, alpha: 0.0, beta: 0.0, gamma: 0.0,
+  hvl1: 0.093, hvl2: 0.51, tvl1: 1.32, tvl2: 10.7}
+--- {kV_source: '', isotope: I-123, material: Concrete, alpha: 0.0, beta: 0.0, gamma: 0.0,
+  hvl1: 37.3, hvl2: 45.3, tvl1: 128.2, tvl2: 106.5}
+--- {kV_source: '', isotope: I-131, material: Lead, alpha: 0.0, beta: 0.0, gamma: 0.0,
+  hvl1: 2.83, hvl2: 2.92, tvl1: 10.1, tvl2: 15.7}
+--- {kV_source: '', isotope: I-131, material: Concrete, alpha: 0.0, beta: 0.0, gamma: 0.0,
+  hvl1: 94.6, hvl2: 51.0, tvl1: 205.0, tvl2: 134.4}
+--- {kV_source: '', isotope: Lu-177, material: Lead, alpha: 0.0, beta: 0.0, gamma: 0.0,
+  hvl1: 0.53, hvl2: 0.65, tvl1: 2.13, tvl2: 2.64}
+--- {kV_source: '', isotope: Lu-177, material: Concrete, alpha: 0.0, beta: 0.0, gamma: 0.0,
+  hvl1: 70.8, hvl2: 37.5, tvl1: 152.7, tvl2: 101.6}

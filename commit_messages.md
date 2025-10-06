@@ -1,3 +1,18 @@
+# v2.1.1
+_06 Oct, 2025_
+
+Changes:
+- Updated default half and tenth value layers and gamma ray constants (from open source) according to Radionuclide Information Booklet (July 2025) https://open.canada.ca/data/en/dataset/ac988c2a-ce33-4e8e-bf64-2c052c50892f
+	- If you have a shield_data.yaml in your config_folder, nothing will change unless you actively choose to import the new values using the new options for this
+	- Values for F-18 unchanged (still from AAPM TG108)
+	- Gamma ray constants kept as before (not from the Booklet). 
+	- For more details see Wiki - Settings
+- Option to add new isotopes and corresponding shielding properties from the Booklet. Find the import from Booklet buttons in Settings.
+- Improved functionalities of editing areas / walls and scale by click and drag in floor plan.
+
+Bugfixes:
+- Fixed hangup on countours when changing CT scatter model in Settings.
+
 # v2.1.0
 _02 Oct, 2025_
 

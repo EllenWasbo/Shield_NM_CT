@@ -34,8 +34,12 @@ def get_pos_from_text(text):
     """
     coords = text.split(',')
     if len(coords) == 2:
-        x = int(coords[0])
-        y = int(coords[1])
+        try:
+            x = int(coords[0])
+            y = int(coords[1])
+        except ValueError:
+            x = None
+            y = None
     else:
         x = None
         y = None

@@ -6,6 +6,7 @@
 		<file alias="shield_data.yaml">config_defaults\shield_data.yaml</file>
 		<file alias="colormaps.yaml">config_defaults\colormaps.yaml</file>
 		<file alias="ct_models.yaml">config_defaults\ct_models.yaml</file>
+		<file alias="radionuclide_information_booklet_2025_values.csv">config_defaults\radionuclide_information_booklet_2025_values.csv</file>
 	</qresource>
 	<qresource prefix="icons">
 		<file alias="add.png">icons\add.png</file>

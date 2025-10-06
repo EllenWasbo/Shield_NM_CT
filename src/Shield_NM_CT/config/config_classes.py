@@ -63,7 +63,7 @@ class Isotope:
 
     label: str = ''  # visible name e.g. F-18
     half_life: float = 0.0  # half life in unit as specified by half_life_unit
-    half_life_unit: str = 'hours'  # minutes, hours or days
+    half_life_unit: str = 'hours'  # minutes, hours, days or years
     gamma_ray_constant: float = 0.0  # uSv/h per MBq @ 1m unshielded pointsource
     patient_constant: float = 0.0  # uSv/h per MBq @ 1m shielded by patient body
 

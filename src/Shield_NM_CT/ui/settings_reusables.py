@@ -140,7 +140,8 @@ class StackWidget(QWidget):
             res = messageboxes.QuestionBox(
                 parent=self, title='Save changes?',
                 msg='Save changes before changing template?')
-            if res.exec():
+            res.exec()
+            if res.clickedButton() == res.yes:
                 self.wid_temp_list.save(label=self.current_template.label)
             else:
                 self.flag_edit(False)
@@ -339,11 +340,15 @@ class TempSelector(QWidget):
         self.vlo_top = QVBoxLayout()
         self.vlo.addLayout(self.vlo_top)
 
-        self.vlo.addWidget(uir.LabelItalic(self.parent.temp_alias.title()+'s'))
+        tit = (self.parent.temp_alias.title() + 's'
+               if self.parent.temp_alias[0:2] != 'CT'
+               else self.parent.temp_alias + 's')
+        self.vlo.addWidget(uir.LabelItalic(tit))
         hlo_list = QHBoxLayout()
         self.vlo.addLayout(hlo_list)
         self.vlo.addStretch()
         self.list_temps = QListWidget()
+        self.list_temps.setStyleSheet("border : 1px solid #777777;")
         self.list_temps.currentItemChanged.connect(self.parent.update_clicked_template)
         hlo_list.addWidget(self.list_temps)
 
@@ -357,7 +362,7 @@ class TempSelector(QWidget):
             self.act_clear.triggered.connect(self.clear)
             self.act_add = QAction(
                 QIcon(f'{os.environ[ENV_ICON_PATH]}add.png'),
-                'Add current values as new ' + self.parent.temp_alias, self)
+                'Add new ' + self.parent.temp_alias, self)
             self.act_add.triggered.connect(self.add)
             self.act_save = QAction(
                 QIcon(f'{os.environ[ENV_ICON_PATH]}save.png'),
@@ -418,20 +423,33 @@ class TempSelector(QWidget):
 
     def add(self):
         """Add new template to list. Ask for new name and verify."""
-        text, proceed = QInputDialog.getText(
-            self, 'New name',
-            'Name the new ' + self.parent.temp_alias + '                      ')
-        # todo also ask if add as current or as empty
-        text = valid_template_name(text)
-        if proceed and text != '':
-            if text in self.parent.current_labels:
-                QMessageBox.warning(
-                    self, 'Name already in use',
-                    'This name is already in use.')
-            else:
-                self.parent.add(text)
-        if self.parent.fname == 'digit_templates':
-            self.parent.edit_template()
+        proceed_name = True
+        if self.parent.fname == 'isotopes':
+            # select or add
+            res = messageboxes.QuestionBox(
+                parent=self, title='Add isotope',
+                msg=('Select isotope and values from Radionuclide Information '
+                     'Booklet 2025 or add empty?'),
+                yes_text='Select from Booklet',
+                no_text='Add empty')
+            res.exec()
+
+            if res.clickedButton() == res.yes:
+                proceed_name = False
+                self.parent.import_booklet('')
+        if proceed_name:
+            text, proceed = QInputDialog.getText(
+                self, 'New name',
+                'Name the new ' + self.parent.temp_alias + '                      ')
+            # todo also ask if add as current or as empty
+            text = valid_template_name(text)
+            if proceed and text != '':
+                if text in self.parent.current_labels:
+                    QMessageBox.warning(
+                        self, 'Name already in use',
+                        'This name is already in use.')
+                else:
+                    self.parent.add(text)
 
     def save(self, label=None):
         """Save button pressed or specific save on label."""
@@ -463,7 +481,8 @@ class TempSelector(QWidget):
                         Save changes before rename?''',
                         yes_text='Yes',
                         no_text='Cancel')
-                    if res.exec():
+                    res.exec()
+                    if res.clickedButton() == res.yes:
                         self.save()
                     else:
                         proceed = False

@@ -12,7 +12,8 @@ from PyQt6 import QtCore
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox,
-    QGroupBox, QButtonGroup, QDialogButtonBox, QSpinBox,
+    QGroupBox, QButtonGroup, QDialogButtonBox, QSpinBox, QPushButton,
+    QTableWidget, QTableWidgetItem,
     QLabel, QRadioButton, QCheckBox, QFileDialog
     )
 
@@ -193,7 +194,8 @@ class StartUpDialog(ShieldDialog):
             res = messageboxes.QuestionBox(
                 self, title='Shared config folder', msg=quest,
                 yes_text='Yes, now', no_text='No, later')
-            if res.exec() == 0:
+            res.exec()
+            if res.clickedButton() == res.no:
                 locate = False
         if locate:
             dlg = QFileDialog()
@@ -275,6 +277,59 @@ class HeightsDialog(ShieldDialog):
         layout.addWidget(buttons)
 
         self.setLayout(layout)
+
+
+class DataFrameDisplay(ShieldDialog):
+    """QDialog to display a table (dataframe) with select row option."""
+
+    def __init__(self, parent_widget, dataframe, title='',
+                 min_width=1000, min_height=1000):
+        super().__init__()
+        vlo = QVBoxLayout()
+        self.setLayout(vlo)
+        self.table = QTableWidget(self)
+        self.dataframe = dataframe
+        n_rows = len(dataframe)
+        n_cols = len([*dataframe])
+        self.table.setRowCount(n_rows)
+        self.table.setColumnCount(n_cols)
+        self.table.setHorizontalHeaderLabels([*dataframe])
+        self.table.verticalHeader().setVisible(False)
+        for c in range(n_cols):
+            for r in range(n_rows):
+                twi = QTableWidgetItem(str(dataframe.iat[r, c]))
+                if c > 0:
+                    twi.setTextAlignment(4)
+                self.table.setItem(r, c, twi)
+        self.table.resizeColumnsToContents()
+        self.table.resizeRowsToContents()
+        vlo.addWidget(self.table)
+        buttons = QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        self.buttonBox = QDialogButtonBox(buttons)
+        ok_button = self.buttonBox.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_button:  # Check if the button exists
+            ok_button.setText("Use and save values from selected row")
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+        hlo_buttons = QHBoxLayout()
+        vlo.addLayout(hlo_buttons)
+        clipboard_button = QPushButton('Copy table to clipboard')
+        clipboard_button.clicked.connect(self.copy_clipboard)
+        hlo_buttons.addWidget(clipboard_button)
+        hlo_buttons.addWidget(self.buttonBox)
+
+        self.setWindowTitle(title)
+        self.setMinimumWidth(min_width)
+        self.setMinimumHeight(min_height)
+
+    def copy_clipboard(self):
+        self.dataframe.to_clipboard(index=False, excel=True)
+        QMessageBox.information(self, 'Table in clipboard',
+                    'Values in table are copied to clipboard.',
+                    QMessageBox.StandardButton.Ok)
+
+    def get_row_number(self):
+        return  self.table.currentRow()
 
 
 class EditAnnotationsDialog(ShieldDialog):

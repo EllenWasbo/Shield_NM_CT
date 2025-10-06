@@ -8,6 +8,7 @@ import os
 import re
 import copy
 import numpy as np
+import pandas as pd
 from time import time
 from io import BytesIO
 
@@ -33,9 +34,103 @@ from Shield_NM_CT.ui import messageboxes
 from Shield_NM_CT.config.Shield_NM_CT_constants import ENV_ICON_PATH
 from Shield_NM_CT.scripts.mini_methods_format import valid_template_name
 from Shield_NM_CT.scripts.calculate_dose import generate_CT_doseratemap
-from Shield_NM_CT.ui.ui_dialogs import ShieldDialog
+from Shield_NM_CT.ui.ui_dialogs import ShieldDialog, DataFrameDisplay
 # Shield_NM_CT block end
 
+
+def read_booklet(isotope_name, parent):
+    file = QFile(
+        ':/config_defaults/radionuclide_information_booklet_2025_values.csv')
+    file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text)
+    df = pd.read_csv(file, sep=',', decimal=',')
+    if isotope_name:
+        df_this = df[df['Isotope'] == isotope_name]
+    else:
+        df_this = pd.DataFrame()
+    if df_this.size == 0:
+        # select from list
+        dlg = DataFrameDisplay(
+            parent, df,
+            title='Available values',
+            min_width=1100, min_height=500)
+        if dlg.exec():
+            rowno = dlg.get_row_number()
+            if rowno > -1:
+                df_this = df.iloc[rowno]
+
+    return df_this
+
+
+def import_shield_booklet(df_row, parent_stack, specific_material=''):
+    """Import HVL/TVL for a given isotope in booklet table."""
+    # add materials if not exist
+    widget_shield_data = getattr(
+        parent_stack.settings_dialog, 'widget_shield_data')
+    widget_shield_data.update_from_yaml()
+    materials = [x.label for x in widget_shield_data.materials]
+    booklet_materials = ['Lead', 'Steel', 'Concrete']
+    for material in booklet_materials:
+        proceed_material = True
+        if specific_material:
+            if material != specific_material:
+                proceed_material = False
+        elif material not in materials:
+            proceed_material = add_material(material, parent_stack)
+            materials = [x.label for x in widget_shield_data.materials]
+        if proceed_material:
+            sel_idx = materials.index(material)
+            bm_idx = booklet_materials.index(material)
+            widget_shield_data.btns_source_type.button(0).setChecked(True)
+            if not isinstance(df_row.iloc[0], str): # pandas series
+                df_row = df_row.iloc[0]
+            widget_shield_data.cbox_sources.setCurrentText(str(df_row.iloc[0]))
+            widget_shield_data.refresh_templist(selected_label=material)
+            widget_shield_data.current_template = cfc.ShieldData(
+                isotope=df_row.iloc[0], material=material,
+                hvl1 = float(df_row.iloc[4 + 4 * bm_idx + 0]),
+                hvl2 = float(df_row.iloc[4 + 4 * bm_idx + 1]),
+                tvl1 = float(df_row.iloc[4 + 4 * bm_idx + 2]),
+                tvl2 = float(df_row.iloc[4 + 4 * bm_idx + 3])
+                )
+            widget_shield_data.update_data()
+            tempno = widget_shield_data.find_index_of_template(
+                selected_material_id=sel_idx)
+            if tempno is not None:
+                widget_shield_data.templates[tempno] = copy.deepcopy(
+                    widget_shield_data.current_template)
+            else:
+                widget_shield_data.templates.append(
+                    widget_shield_data.current_template)
+            widget_shield_data.save_shield_data(update_before_save=False)
+            widget_shield_data.refresh_templist(selected_label=material)
+
+
+def add_material(material, parent_stack):
+    """Add standard material (lead, steel, concrete)."""
+    added = False
+    proceed = messageboxes.proceed_question(
+        parent_stack, f'Add material {material}?')
+    if proceed:
+        labels = ['Lead', 'Steel', 'Concrete']
+        thicks = [2., 2., 200.]
+        reals = [False, False, True]
+        colors =  ['#0000bb', '#bb7733', '#555555']
+        idx = labels.index(material)
+        widget_materials = getattr(
+            parent_stack.settings_dialog, 'widget_materials')
+        widget_materials.update_from_yaml()
+        widget_materials.add(material)
+        widget_materials.current_template.default_thickness = thicks[idx]
+        widget_materials.current_template.real_thickness = reals[idx]
+        widget_materials.current_template.color = colors[idx]
+        widget_materials.update_data()
+        widget_materials.wid_temp_list.save()
+        if widget_materials.edited is False:
+            widget_shield_data = getattr(
+                parent_stack.settings_dialog, 'widget_shield_data')
+            widget_shield_data.update_from_yaml()
+            added = True
+    return added
 
 class IsotopeWidget(StackWidget):
     """Isotope settings."""
@@ -51,7 +146,7 @@ class IsotopeWidget(StackWidget):
         self.half_life = QDoubleSpinBox(minimum=0, maximum=100000., decimals=2)
         self.half_life.valueChanged.connect(lambda: self.flag_edit(True))
         self.half_life_unit = QComboBox()
-        self.half_life_unit.addItems(['minutes', 'hours', 'days'])
+        self.half_life_unit.addItems(['minutes', 'hours', 'days', 'years'])
         self.half_life_unit.currentIndexChanged.connect(lambda: self.flag_edit(True))
         self.gamma_ray_constant = QDoubleSpinBox(decimals=5)
         self.gamma_ray_constant.valueChanged.connect(self.constants_changed)
@@ -92,6 +187,11 @@ class IsotopeWidget(StackWidget):
             'Patient constant relative to point source constant:'))
         hlo_percent.addWidget(self.patient_percent)
         hlo_percent.addStretch()
+        btn_import_booklet = QPushButton(
+            'Import values frow Radionuclide Information Booklet 2025')
+        btn_import_booklet.clicked.connect(
+            lambda: self.import_booklet('*selected*'))
+        self.vlo_temp.addWidget(btn_import_booklet)
 
         self.vlo_temp.addStretch()
 
@@ -122,6 +222,43 @@ class IsotopeWidget(StackWidget):
             ratio = self.patient_constant.value() / self.gamma_ray_constant.value()
             txt = f'{100*ratio:.1f} %'
         self.patient_percent.setText(txt)
+
+    def import_booklet(self, isotope_name=''):
+        if isotope_name == '*selected*':
+            isotope_name = self.current_template.label
+        df_row = read_booklet(isotope_name, self)
+        if df_row.size > 0:
+            proceed = True
+            if isotope_name == '':
+                text = df_row.iloc[0]
+                if text in self.current_labels:
+                    QMessageBox.warning(
+                        self, 'Name already in use',
+                        'This name is already in use.')
+                    proceed = False
+                else:
+                    self.add(text)
+            if proceed:
+                self.current_template.half_life_unit = df_row.iloc[2]
+                self.current_template.half_life = float(df_row.iloc[1])
+                dcf = float(df_row.iloc[3])
+                self.current_template.gamma_ray_constant = dcf
+                self.current_template.patient_constant = dcf
+                self.update_data()
+                self.wid_temp_list.save()
+                msg = (
+                    'NB Gamma ray constant from patient is by default set '
+                    'equal to gamma ray constant from point source.')
+                QMessageBox.information(self, 'Information', msg,
+                                        QMessageBox.StandardButton.Ok)
+                proceed = messageboxes.proceed_question(
+                    self,
+                    'Proceed adding shield data for lead / steel / concrete ?')
+                if proceed:
+                    import_shield_booklet(df_row, self)
+                    QMessageBox.information(
+                        self, 'Information', 'Finished adding data',
+                        QMessageBox.StandardButton.Ok)
 
     def delete(self):
         """Delete isotope and related shield data."""
@@ -188,11 +325,13 @@ class CTmapCanvas(FigureCanvasQTAgg):
         self.scatter_factors.set_data(self.overlay)
 
         try:
-            for coll in self.contours.collections:
+            for contour in self.contours:
                 try:
-                    coll.remove()
+                    contour.remove()
                 except ValueError:
                     pass
+        except TypeError:
+            self.contours.remove()
         except AttributeError:
             pass
         try:
@@ -508,8 +647,8 @@ class ShieldDataWidget(StackWidget):
             '\u03b2, \u03b3 for this equation are defined.<br>'
             'Else half and tenth value layer is used to calculate the transmission '
             'according to the method described in '
-            '<a href="https://nuclearsafety.gc.ca/pubs_catalogue/uploads/radionuclide-information-booklet-2022-eng.pdf">'
-            'Radionuclide Information Booklet (2023)</a>.'
+            '<a href="https://open.canada.ca/data/en/dataset/ac988c2a-ce33-4e8e-bf64-2c052c50892f">'
+            'Radionuclide Information Booklet (2025)</a>.'
             )
         super().__init__(settings_dialog, header, subtxt, temp_list=True, temp_alias='material')
         self.fname = 'shield_data'
@@ -600,16 +739,23 @@ class ShieldDataWidget(StackWidget):
         self.vlo_temp.addLayout(hlo)
         flo1 = QFormLayout()
         hlo.addLayout(flo1)
+        flo1.addRow(uir.LabelHeader(
+            'Archer equation used (if \u03b1, \u03b2, \u03b3 set)', 3))
         flo1.addRow(QLabel('\u03b1 (mm-1):'), self.alpha)
         flo1.addRow(QLabel('\u03b2 (mm-1):'), self.beta)
         flo1.addRow(QLabel('\u03b3:'), self.gamma)
         flo2 = QFormLayout()
         hlo.addLayout(flo2)
+        flo2.addRow(uir.LabelHeader(
+            'Alternative 2 if \u03b1, \u03b2, \u03b3 = 0', 3))
         flo2.addRow(QLabel('HVL1 (mm): '), self.hvl1)
         flo2.addRow(QLabel('HVL2 (mm): '), self.hvl2)
         flo2.addRow(QLabel('TVL1 (mm): '), self.tvl1)
         flo2.addRow(QLabel('TVL2 (mm): '), self.tvl2)
-
+        self.btn_import_booklet = QPushButton(
+            'Import values frow Radionuclide Information Booklet 2025')
+        flo2.addRow(self.btn_import_booklet)
+        self.btn_import_booklet.clicked.connect(self.import_booklet)
         self.vlo_temp.addStretch()
         hlo_btns = QHBoxLayout()
         self.vlo_temp.addLayout(hlo_btns)
@@ -671,9 +817,11 @@ class ShieldDataWidget(StackWidget):
         if self.btns_source_type.button(0).isChecked():
             labels = [isotope.label for isotope in self.isotopes]
             self.toolbar_kV_source.setVisible(False)
+            self.btn_import_booklet.setVisible(True)
         else:
             labels = self.main.general_values.kV_sources
             self.toolbar_kV_source.setVisible(True)
+            self.btn_import_booklet.setVisible(False)
         self.blockSignals(True)
         self.cbox_sources.clear()
         self.cbox_sources.addItems(labels)
@@ -686,7 +834,8 @@ class ShieldDataWidget(StackWidget):
             res = messageboxes.QuestionBox(
                 parent=self, title='Save changes?',
                 msg='Save changes before changing template?')
-            if res.exec():
+            res.exec()
+            if res.clickedButton() == res.yes:
                 self.get_current_template(ignore_material=True)
                 tempno = self.find_index_of_template()
                 self.templates[tempno] = copy.deepcopy(self.current_template)
@@ -723,7 +872,8 @@ class ShieldDataWidget(StackWidget):
             res = messageboxes.QuestionBox(
                 parent=self, title='Save changes?',
                 msg='Save changes before changing selections?')
-            if res.exec():
+            res.exec()
+            if res.clickedButton() == res.yes:
                 self.save_shield_data(update_before_save=True)
             else:
                 self.flag_edit(False)
@@ -738,7 +888,8 @@ class ShieldDataWidget(StackWidget):
             res = messageboxes.QuestionBox(
                 parent=self, title='Save changes?',
                 msg='Save changes before changing selections?')
-            if res.exec():
+            res.exec()
+            if res.clickedButton() == res.yes:
                 self.save_shield_data(update_before_save=True)
             else:
                 self.flag_edit(False)
@@ -890,6 +1041,24 @@ class ShieldDataWidget(StackWidget):
                     break
         return index
 
+    def import_booklet(self):
+        df_row = read_booklet(self.cbox_sources.currentText(), self)
+        if df_row.size > 0:
+            selected_id = self.wid_temp_list.list_temps.currentIndex().row()
+            sel_mat = self.materials[selected_id]
+            res = messageboxes.QuestionBox(
+                parent=self, title='This or all materials?',
+                msg='Import for selected material or all materials '
+                'defined in the booklet?',
+                yes_text=f'Selected material ({sel_mat.label})',
+                no_text='All materials (Lead, Steel, Concrete)')
+            res.exec()
+            specific_material = ''
+            if res.clickedButton() == res.yes:
+                specific_material = sel_mat.label
+            import_shield_booklet(df_row, self,
+                                  specific_material=specific_material)
+
     def save_shield_data(self, update_before_save=True):
         """Save shield data."""
         if update_before_save:
@@ -900,6 +1069,33 @@ class ShieldDataWidget(StackWidget):
             else:
                 self.templates.append(self.current_template)
         ok_save = self.verify_save(self.fname, self.lastload)
+        if ok_save:
+            # verify that either all aplha,beta,gamma not zero
+            # or hvl,tvls all >0
+            if not all([
+                    self.current_template.alpha,
+                    self.current_template.beta,
+                    self.current_template.gamma]):
+                if any([
+                        self.current_template.alpha,
+                        self.current_template.beta,
+                        self.current_template.gamma]):
+                    ok_save = False
+                    msg = (
+                        'Alpha, beta or gamma is nonzero. These should all be '
+                        'zero or all nonzero to avoid confusion. '
+                        'Saving failed.')
+                    QMessageBox.warning(self, 'Confusing values', msg)
+                elif not all([
+                        self.current_template.hvl1,
+                        self.current_template.hvl2,
+                        self.current_template.tvl1,
+                        self.current_template.tvl2]):
+                    ok_save = False
+                    msg = (
+                        'Either alpha, beta, gamma should be nonzero or all '
+                        'HVL and TVL should be nonzero. Saving failed.')
+                    QMessageBox.warning(self, 'Incorrect values', msg)
         if ok_save:
             ok_save, path = cff.save_settings(
                 self.templates, fname=self.fname)
