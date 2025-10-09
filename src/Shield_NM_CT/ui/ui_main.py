@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
     QGroupBox, QButtonGroup, QScrollArea, QTabWidget,
     QPushButton, QLabel, QSpinBox,
     QRadioButton, QCheckBox, QSlider, QToolButton,
-    QMenu, QMessageBox, QFileDialog
+    QMenu, QMessageBox, QFileDialog, QDialog
     )
 
 import matplotlib as mpl
@@ -66,9 +66,10 @@ class GuiData():
     current_floor = 1
     rectify = False  # if in tab Walls and rectify is selected
     annotations = True
-    annotations_fontsize = 15
-    annotations_linethick = 3
-    annotations_markersize = (12, 17)  # first standard, second hovered
+    annotations_fontsize = 10
+    annotations_linethick = 1
+    annotations_markersize = 9
+    hover_addsize = 5
     annotations_delta = (20, 20)
     handle_size = 15
     picker = 10  # picker margin for point and line
@@ -238,6 +239,7 @@ class MainWindow(QMainWindow):
         self.create_cmap_objects()
         self.gui.annotations_linethick = self.user_prefs.annotations_linethick
         self.gui.annotations_fontsize = self.user_prefs.annotations_fontsize
+        self.gui.annotations_markersize = self.user_prefs.annotations_markersize
         self.gui.picker = self.user_prefs.picker
         self.gui.snap_radius = self.user_prefs.snap_radius
 
@@ -503,8 +505,28 @@ class MainWindow(QMainWindow):
                             pass
             """
 
+    def finish_cleanup(self):
+        """Cleanup/save before exit."""
+        try:
+            cff.remove_user_from_active_users()
+            # save current settings to user prefs
+            self.user_prefs.annotations_linethick = self.gui.annotations_linethick
+            self.user_prefs.annotations_fontsize = self.gui.annotations_fontsize
+            self.user_prefs.annotations_markersize = self.gui.annotations_markersize
+            self.user_prefs.picker = self.gui.picker
+            self.user_prefs.snap_radius = self.gui.snap_radius
+            ok, path = cff.save_user_prefs(self.user_prefs, parentwidget=self)
+        except:  # on pytest
+            pass
+
+    def closeEvent(self, event):
+        """Exit app by x in the corner."""
+        self.finish_cleanup()
+        event.accept()
+
     def exit_app(self):
         """Exit app."""
+        self.finish_cleanup()
         sys.exit()
 
     def about(self):
@@ -1046,7 +1068,8 @@ class FloorCanvas(FigureCanvasQTAgg):
                     else:
                         if 'CT' not in self.hovered_artist.get_gid():
                             self.hovered_artist.set_markersize(
-                                self.main.gui.annotations_markersize[1])
+                                self.main.gui.annotations_markersize
+                                + self.main.gui.hover_addsize)
                         else:
                             self.set_CT_marker_properties(
                                 marker=self.hovered_artist, hover=True)
@@ -1068,14 +1091,14 @@ class FloorCanvas(FigureCanvasQTAgg):
                                     prev_hovered_artist.set_markeredgewidth(0)
                                 else:
                                     prev_hovered_artist.set_markersize(
-                                        self.main.gui.annotations_markersize[0])
+                                        self.main.gui.annotations_markersize)
                                     prev_hovered_artist.set_markeredgewidth(1)
                             except TypeError:
                                 pass
                         else:
                             if 'CT' not in prev_hovered_artist.get_gid():
                                 prev_hovered_artist.set_markersize(
-                                    self.main.gui.annotations_markersize[0])
+                                    self.main.gui.annotations_markersize)
                             else:
                                 self.set_CT_marker_properties(
                                     marker=prev_hovered_artist, hover=False)
@@ -1099,7 +1122,8 @@ class FloorCanvas(FigureCanvasQTAgg):
                         else:
                             if 'CT' not in self.hovered_artist.get_gid():
                                 self.hovered_artist.set_markersize(
-                                    self.main.gui.annotations_markersize[1])
+                                    self.main.gui.annotations_markersize
+                                    + self.main.gui.hover_addsize)
                             else:
                                 self.set_CT_marker_properties(
                                     marker=self.hovered_artist, hover=True)
@@ -1166,7 +1190,7 @@ class FloorCanvas(FigureCanvasQTAgg):
                         self.ax.plot(
                             event.xdata, event.ydata,
                             'ko', fillstyle='none',
-                            markersize=self.main.gui.annotations_markersize[0],
+                            markersize=self.main.gui.annotations_markersize,
                             gid='point_release')
 
                 if self.drag_handle:
@@ -1601,6 +1625,14 @@ class FloorCanvas(FigureCanvasQTAgg):
                 patch.set_linewidth(linethick)
         self.draw_idle()
 
+    def update_annotations_markersize(self, markersize):
+        """Refresh all annotation line elements with input line thickness."""
+        for line in self.ax.lines:
+            gid = line.get_gid()
+            if 'point' in gid or 'NM' in gid or 'OT' in gid:
+                line.set_markersize(markersize)
+        self.draw_idle()
+
     def set_picker_areas(self, set_picker):
         """Set picker of all areas (patches) to True or False."""
         if len(self.ax.patches) > 0 and self.main.gui.current_tab == 'Areas':
@@ -1835,15 +1867,18 @@ class FloorWidget(QWidget):
             annotations=self.main.gui.annotations,
             annotations_linethick=self.main.gui.annotations_linethick,
             annotations_fontsize=self.main.gui.annotations_fontsize,
+            annotations_markersize=self.main.gui.annotations_markersize,
             picker=self.main.gui.picker,
             snap_radius=self.main.gui.snap_radius,
             canvas=self.canvas)
         res = dlg.exec()
         if res:
-            ann, linethick, fontsize, picker, snap_radius = dlg.get_data()
+            vals = dlg.get_data()
+            ann, linethick, fontsize, markersize, picker, snap_radius = vals
             self.main.gui.annotations = ann
             self.main.gui.annotations_linethick = linethick
             self.main.gui.annotations_fontsize = fontsize
+            self.main.gui.annotations_markersize = markersize
             self.main.gui.picker = picker
             self.main.gui.snap_radius = snap_radius
         else:
@@ -1851,6 +1886,8 @@ class FloorWidget(QWidget):
                 self.main.gui.annotations_fontsize)
             self.canvas.update_annotations_linethick(
                 self.main.gui.annotations_linethick)
+            self.canvas.update_annotations_markersize(
+                self.main.gui.annotations_markersize)
 
     def clicked_imgsize(self):
         """Maximize or reset image size."""

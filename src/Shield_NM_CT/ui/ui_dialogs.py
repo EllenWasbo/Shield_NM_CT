@@ -336,7 +336,8 @@ class EditAnnotationsDialog(ShieldDialog):
     """Dialog to edit annotation settings."""
 
     def __init__(self, annotations=True, annotations_linethick=0,
-                 annotations_fontsize=0, picker=0, snap_radius=0, canvas=None):
+                 annotations_fontsize=0, annotations_markersize=0,
+                 picker=0, snap_radius=0, canvas=None):
         super().__init__()
         self.canvas = canvas
 
@@ -370,6 +371,15 @@ class EditAnnotationsDialog(ShieldDialog):
                 lambda: self.canvas.update_annotations_fontsize(self.spin_font.value())
                 )
         fLO.addRow(QLabel('Font size'), self.spin_font)
+
+        self.spin_marker = QSpinBox()
+        self.spin_marker.setRange(2, 100)
+        self.spin_marker.setValue(annotations_markersize)
+        if self.canvas:
+            self.spin_marker.valueChanged.connect(
+                lambda: self.canvas.update_annotations_markersize(self.spin_marker.value())
+                )
+        fLO.addRow(QLabel('Marker size'), self.spin_marker)
 
         self.spin_picker = QSpinBox()
         self.spin_picker.setRange(0, 100)
@@ -407,6 +417,7 @@ class EditAnnotationsDialog(ShieldDialog):
             self.chk_annotations.isChecked(),
             self.spin_line.value(),
             self.spin_font.value(),
+            self.spin_marker.value(),
             self.spin_picker.value(),
             self.spin_snap_radius.value()
             )

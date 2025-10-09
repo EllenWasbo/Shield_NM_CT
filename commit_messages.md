@@ -1,3 +1,9 @@
+# v2.1.2
+_09 Oct, 2025_
+
+- Added option to adjust and save markersize (size of sources and points in the floormap). 
+- Current annotation settings are now saved as user preferences when closing the program.
+
 # v2.1.1
 _06 Oct, 2025_
 

@@ -17,6 +17,7 @@ class UserPreferences:
     fontsize: int = 9
     annotations_linethick: int = 1
     annotations_fontsize: int = 10
+    annotations_markersize: int = 9
     picker: int = 10
     snap_radius: int = 20
 

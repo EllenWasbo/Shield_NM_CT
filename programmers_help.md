@@ -23,8 +23,10 @@ To be able to plot during pytest:
 
 ## Update resources.py after changes
 - add to resouces.qrc if needed
-- cd cd folder below(!) 'src'
-- pyrcc5 resources.qrc -o resources.py
+- with PySide6 installed (in a separate virtual environment):
+	- cd C:\...\Shield_NM_CT\src\Shield_NM_CT
+	- pyside6-rcc resources.qrc -o resources.py
+- open the resources.py file and replace the PySide6 import to PyQt6
  
 ## Update requirements.txt
 - cd to src-folder

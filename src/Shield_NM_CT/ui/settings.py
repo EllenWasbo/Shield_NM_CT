@@ -198,6 +198,7 @@ class UserSettingsWidget(StackWidget):
         self.fontsize = QSpinBox()
         self.annotations_linethick = QSpinBox()
         self.annotations_fontsize = QSpinBox()
+        self.annotations_markersize = QSpinBox()
         self.picker = QSpinBox()
         self.snap_radius = QSpinBox()
 
@@ -244,6 +245,9 @@ class UserSettingsWidget(StackWidget):
         self.annotations_fontsize.setRange(5, 100)
         self.annotations_fontsize.valueChanged.connect(self.flag_edit)
         flo_annot.addRow(QLabel('Font size:'), self.annotations_fontsize)
+        self.annotations_markersize.setRange(2, 100)
+        self.annotations_markersize.valueChanged.connect(self.flag_edit)
+        flo_annot.addRow(QLabel('Marker size:'), self.annotations_markersize)
         self.picker.setRange(0, 100)
         self.picker.valueChanged.connect(self.flag_edit)
         flo_annot.addRow(QLabel('Picker radius:'), self.picker)
@@ -274,6 +278,7 @@ class UserSettingsWidget(StackWidget):
         self.fontsize.setValue(self.user_prefs.fontsize)
         self.annotations_linethick.setValue(self.user_prefs.annotations_linethick)
         self.annotations_fontsize.setValue(self.user_prefs.annotations_fontsize)
+        self.annotations_markersize.setValue(self.user_prefs.annotations_markersize)
         self.picker.setValue(self.user_prefs.picker)
         self.snap_radius.setValue(self.user_prefs.snap_radius)
         self.flag_edit(False)
@@ -288,6 +293,7 @@ class UserSettingsWidget(StackWidget):
         self.user_prefs.fontsize = self.fontsize.value()
         self.user_prefs.annotations_linethick = self.annotations_linethick.value()
         self.user_prefs.annotations_fontsize = self.annotations_fontsize.value()
+        self.user_prefs.annotations_markersize = self.annotations_markersize.value()
         self.user_prefs.picker = self.picker.value()
         self.user_prefs.snap_radius = self.snap_radius.value()
 

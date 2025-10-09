@@ -204,7 +204,7 @@ class InputTab(QWidget):
         if line_index is None:  # add
             if x is not None:
                 canvas.ax.plot(
-                    x, y, markersize=self.main.gui.annotations_markersize[0],
+                    x, y, markersize=self.main.gui.annotations_markersize,
                     markeredgewidth=1, picker=self.main.gui.picker,
                     gid=f'{self.modality}_{self.active_row}',
                     **MARKER_STYLE[self.modality])
@@ -267,7 +267,7 @@ class InputTab(QWidget):
         all_sources : bool, optional
             If true generate all annotations, else only specific. The default is True.
         modalities : list of str
-            'NM', 'CT'
+            'NM', 'OT', 'CT', 'point'
         """
         canvas = self.main.wFloorDisplay.canvas
 
@@ -292,7 +292,7 @@ class InputTab(QWidget):
                         if x is not None:
                             canvas.ax.plot(
                                 x, y, **MARKER_STYLE[w.modality],
-                                markersize=w.main.gui.annotations_markersize[0],
+                                markersize=w.main.gui.annotations_markersize,
                                 markeredgewidth=1,
                                 picker=w.main.gui.picker,
                                 gid=f'{w.modality}_{i}')
@@ -1187,7 +1187,7 @@ class WallsTab(InputTab):
                 [x0, x1], [y0, y1],
                 linestyle='-', marker='o', fillstyle='none', solid_capstyle='butt',
                 linewidth=linewidth, color=color,
-                markersize=self.main.gui.annotations_markersize[0],
+                markersize=self.main.gui.annotations_markersize,
                 markeredgecolor='blue', markeredgewidth=0,
                 picker=self.main.gui.picker,
                 gid=f'walls_{row}')
