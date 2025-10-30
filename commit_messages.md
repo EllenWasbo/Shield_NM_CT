@@ -1,3 +1,11 @@
+# v2.1.3
+_30 Oct, 2025_
+
+- Append to existing table now available as option when importing from csv.
+- Fixed crash when getting position for Area and postion is invalid (None / outside floorplan). Now just warning/info.
+- Fixed errors on duplicate row (visual updates and table selections).
+
+
 # v2.1.2
 _09 Oct, 2025_
 

@@ -122,45 +122,68 @@ class InputTab(QWidget):
         self.add_cell_widgets(0)
         self.table_list = [copy.deepcopy(self.empty_row)]
 
+    def refresh_no_dose(self):
+        """Refresh visual on table changes e.g. import and reset if not easily recalculated."""
+        if self.label == 'Areas':
+            self.update_occ_map()
+            if self.main.dose_dict:
+                self.main.sum_dose_days()
+        elif self.label == 'Walls':
+            self.update_wall_annotations()
+            self.highlight_selected_in_image()
+            if self.main.dose_dict:
+                self.main.reset_dose()
+        elif 'source' in self.label:
+            self.update_source_annotations()
+            if self.main.dose_dict:
+                self.main.reset_dose()
+        elif self.label == 'point':
+            self.update_source_annotations()
+            if self.main.dose_dict:
+                self.main.sum_dose_days()
+
     def cell_changed(self, row, col, decimals=None):
         """Value changed by user input."""
-        value = self.get_cell_value(row, col)
-        if decimals:
-            value = round(value, decimals)
-        self.table_list[row][col] = value
-        if col != 1:  # name
-            if self.label == 'Areas':
-                self.update_occ_map()
-                if self.main.dose_dict:
-                    self.main.sum_dose_days()
-            elif self.label == 'Walls':
-                if col == 3:  # material label
-                    # set default material thickness?
-                    # curr_thickness = self.get_cell_value(row, 4)
-                    w = self.table.cellWidget(row, 4)
-                    thickness = self.get_default_thickness_from_material(value)
-                    w.blockSignals(True)  # avoid update annotations twice
-                    w.setValue(thickness)
-                    self.table_list[row][4] = thickness
-                    w.blockSignals(False)
-                self.update_wall_annotation(row, remove_already=True)
-                self.highlight_selected_in_image()
-                if self.main.dose_dict:
-                    self.main.reset_dose()  # TODO auto recalculate?
-            elif 'source' in self.label:
-                self.update_current_source_annotation()
-                if col == 5 and 'CT' in self.label:
-                    w_map = self.table.cellWidget(row, 5)
-                    idx = w_map.currentIndex()
-                    w_unit = self.table.cellWidget(row, 6)
-                    w_unit.setText(self.ct_doserate_units[idx])
-                    self.table_list[row][6] = self.ct_doserate_units[idx]
-                if self.main.dose_dict:
-                    self.main.calculate_dose(source_number=row, modality=self.modality)
-            elif self.label == 'point':
-                self.update_current_source_annotation()
-                if self.main.dose_dict:
-                    self.main.sum_dose_days()
+        try:
+            value = self.get_cell_value(row, col)
+            if decimals:
+                value = round(value, decimals)
+            self.table_list[row][col] = value
+            if col != 1:  # name
+                if self.label == 'Areas':
+                    self.update_occ_map()
+                    if self.main.dose_dict:
+                        self.main.sum_dose_days()
+                elif self.label == 'Walls':
+                    if col == 3:  # material label
+                        # set default material thickness?
+                        # curr_thickness = self.get_cell_value(row, 4)
+                        w = self.table.cellWidget(row, 4)
+                        thickness = self.get_default_thickness_from_material(value)
+                        w.blockSignals(True)  # avoid update annotations twice
+                        w.setValue(thickness)
+                        self.table_list[row][4] = thickness
+                        w.blockSignals(False)
+                    self.update_wall_annotation(row, remove_already=True)
+                    self.highlight_selected_in_image()
+                    if self.main.dose_dict:
+                        self.main.reset_dose()  # TODO auto recalculate?
+                elif 'source' in self.label:
+                    self.update_current_source_annotation()
+                    if col == 5 and 'CT' in self.label:
+                        w_map = self.table.cellWidget(row, 5)
+                        idx = w_map.currentIndex()
+                        w_unit = self.table.cellWidget(row, 6)
+                        w_unit.setText(self.ct_doserate_units[idx])
+                        self.table_list[row][6] = self.ct_doserate_units[idx]
+                    if self.main.dose_dict:
+                        self.main.calculate_dose(source_number=row, modality=self.modality)
+                elif self.label == 'point':
+                    self.update_current_source_annotation()
+                    if self.main.dose_dict:
+                        self.main.sum_dose_days()
+        except (IndexError, TypeError):
+            pass
 
     def get_pos(self):
         """Get positions for element as defined in figure.
@@ -178,7 +201,7 @@ class InputTab(QWidget):
         elif self.main.gui.x1 is None:
             dlg = messageboxes.MessageBoxWithDetails(
                 self, title='Warning',
-                msg='Missing position. Mark position on drawing with mouse.',
+                msg='Missing position. Mark position in floorplan within image borders.',
                 icon=QMessageBox.Icon.Warning)
             dlg.exec()
 
@@ -481,7 +504,7 @@ class InputTab(QWidget):
             QMessageBox.information(self, 'Table in clipboard',
                         'Values in table are copied to clipboard.',)
 
-    def import_csv(self, path='', ncols_expected=5):
+    def import_csv(self, path='', ncols_expected=None):
         """Import table from csv."""
         if path == '':
             fname = QFileDialog.getOpenFileName(
@@ -494,22 +517,42 @@ class InputTab(QWidget):
             df = df.fillna('')
 
             nrows, ncols = df.shape
+            if ncols_expected is None:
+                try:
+                    ncols_expected = len(self.empty_row) + 1
+                except AttributeError:
+                    pass
             if ncols != ncols_expected:
                 QMessageBox.warning(
                     self, 'Import failed',
                     f'Number of columns in imported table ({ncols}) not as '
                     f'expected ({ncols_expected}).',)
             else:
-                self.table.setRowCount(0)
-                self.table_list = []
+                n_already = self.table.rowCount()
+                if n_already == 1:
+                    if self.table_list[0] == self.empty_row:
+                        n_already = 0
+
+                if n_already > 0:
+                    quest = 'Append or replace?'
+                    res = messageboxes.QuestionBox(
+                        self, title='Append or replace?', msg=quest,
+                        yes_text='Append', no_text='Replace')
+                    res.exec()
+                    if res.clickedButton() == res.no:
+                        n_already = 0
+
+                if n_already == 0:
+                    self.table.setRowCount(0)
+                    self.table_list = []
 
                 log = []
                 for row in range(nrows):
-                    self.table.insertRow(row)
+                    self.table.insertRow(row + n_already)
                     self.table_list.append(copy.deepcopy(self.empty_row))
-                    self.add_cell_widgets(row)
+                    self.add_cell_widgets(row + n_already)
                     for col in range(1, ncols):
-                        w = self.table.cellWidget(row, col - 1)
+                        w = self.table.cellWidget(row + n_already, col - 1)
                         w.blockSignals(True)
                         if hasattr(w, 'setChecked'):
                             val = bool(df.iat[row, col])
@@ -529,9 +572,9 @@ class InputTab(QWidget):
                             w.setValue(val)
                         else:
                             val = ''
-                        self.table_list[row][col - 1] = val
+                        self.table_list[row + n_already][col - 1] = val
                         w.blockSignals(False)
-                self.select_row_col(0, 0)
+                self.select_row_col(n_already, 0)
                 if log:
                     dlg = messageboxes.MessageBoxWithDetails(
                         self, title='Warnings',
@@ -540,6 +583,7 @@ class InputTab(QWidget):
                         icon=QMessageBox.Icon.Warning,
                         details=log)
                     dlg.exec()
+                self.refresh_no_dose()
 
 
 class ScaleTab(InputTab):
@@ -689,7 +733,19 @@ class ScaleTab(InputTab):
                 if self.main.gui.calibration_factor:
                     self.update_scale()
         except TypeError:
-            pass
+            dlg = messageboxes.MessageBoxWithDetails(
+                self, title='Warning',
+                msg='Failed reading position. Click and drag line in floorplan within image borders.',
+                info='See details',
+                icon=QMessageBox.Icon.Warning,
+                details=[
+                    f'x0 = {self.main.gui.x0}',
+                    f'x1 = {self.main.gui.x1}',
+                    f'y0 = {self.main.gui.y0}',
+                    f'y1 = {self.main.gui.y1}',
+                         ]
+                )
+            dlg.exec()
 
     def get_scale_from_text(self, text):
         """Get coordinate string for scale.
@@ -864,15 +920,30 @@ class AreasTab(InputTab):
 
     def get_pos(self):
         """Get positions for element as defined in figure."""
-        xs = [round(self.main.gui.x0), round(self.main.gui.x1)]
-        ys = [round(self.main.gui.y0), round(self.main.gui.y1)]
-        text = f'{min(xs)}, {min(ys)}, {max(xs)}, {max(ys)}'
-        if self.active_row > -1:
-            tabitem = self.table.cellWidget(self.active_row, 2)
-            tabitem.setText(text)
-        self.table_list[self.active_row][2] = text
-        self.highlight_selected_in_image()
-        self.update_occ_map()
+        try:
+            xs = [round(self.main.gui.x0), round(self.main.gui.x1)]
+            ys = [round(self.main.gui.y0), round(self.main.gui.y1)]
+            text = f'{min(xs)}, {min(ys)}, {max(xs)}, {max(ys)}'
+            if self.active_row > -1:
+                tabitem = self.table.cellWidget(self.active_row, 2)
+                tabitem.setText(text)
+            self.table_list[self.active_row][2] = text
+            self.highlight_selected_in_image()
+            self.update_occ_map()
+        except TypeError:
+            dlg = messageboxes.MessageBoxWithDetails(
+                self, title='Warning',
+                msg='Failed reading position. Click and drag area in floorplan within image borders.',
+                info='See details',
+                icon=QMessageBox.Icon.Warning,
+                details=[
+                    f'x0 = {self.main.gui.x0}',
+                    f'x1 = {self.main.gui.x1}',
+                    f'y0 = {self.main.gui.y0}',
+                    f'y1 = {self.main.gui.y1}',
+                         ]
+                )
+            dlg.exec()
 
     def highlight_selected_in_image(self):
         """Highlight area in image if area positions given."""
@@ -958,7 +1029,6 @@ class AreasTab(InputTab):
 
             for i in range(self.table.columnCount()):
                 self.table.cellWidget(added_row, i).blockSignals(False)
-            self.update_row_number(added_row, 1)
 
             self.select_row_col(added_row, 1)
             self.table_list[added_row] = copy.deepcopy(values_above)
@@ -1287,10 +1357,10 @@ class WallsTab(InputTab):
 
             for i in range(self.table.columnCount()):
                 self.table.cellWidget(added_row, i).blockSignals(False)
-            self.update_row_number(added_row, 1)
 
             self.select_row_col(added_row, 1)
             self.table_list[added_row] = copy.deepcopy(values_above)
+            self.update_wall_annotations()
 
 
 class NMsourcesTab(InputTab):
@@ -1434,12 +1504,11 @@ class NMsourcesTab(InputTab):
 
             for i in range(self.table.columnCount()):
                 self.table.cellWidget(added_row, i).blockSignals(False)
-            self.update_row_number(added_row, 1)
 
             self.select_row_col(added_row, 1)
             self.table_list[added_row] = copy.deepcopy(values_above)
             # TODO: change label to one not used yet
-            # TODO: update floor display
+            self.update_source_annotations(modalities=['NM'])
 
 
 class CTsourcesTab(InputTab):
@@ -1616,12 +1685,11 @@ class CTsourcesTab(InputTab):
 
             for i in range(self.table.columnCount()):
                 self.table.cellWidget(added_row, i).blockSignals(False)
-            self.update_row_number(added_row, 1)
 
             self.select_row_col(added_row, 1)
             self.table_list[added_row] = copy.deepcopy(values_above)
             # TODO: change label to one not used yet
-            # TODO: update floor display
+            self.update_source_annotations(modalities=['CT'])
 
 
 class OTsourcesTab(InputTab):
@@ -1753,12 +1821,11 @@ class OTsourcesTab(InputTab):
 
             for i in range(self.table.columnCount()):
                 self.table.cellWidget(added_row, i).blockSignals(False)
-            self.update_row_number(added_row, 1)
 
             self.select_row_col(added_row, 1)
             self.table_list[added_row] = copy.deepcopy(values_above)
             # TODO: change label to one not used yet
-            # TODO: update floor display
+            self.update_source_annotations(modalities=['OT'])
 
 
 class PointsTab(InputTab):
