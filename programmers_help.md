@@ -55,15 +55,20 @@ Note that code used by wikidoc are within the .md files of Shield_NM_CT/wiki
 
 ## For building .exe
 This method reduces the output files considerably compared to doing this in conda environment:
-- Install python 3.9.7 and choose to add path
-- Create an empty folder (somewhere) called Shield_NM_CT. This folder should hold the input and output for pyinstaller.
-- Copy into the empty folder src and all files directly from folder above src except .gitignore/.pylintrc
-- Delete these folders in src: icons, config_defaults + all pycache/eggs folders
-- Delete also resources.qrc
+- Install python 3.13 and choose to add path
+- Create an empty folder (somewhere) called to_exe (or what you'd like). This folder should hold the input and output for pyinstaller.
+- Create an empty folder within to_exe to hold all the Shield_NM_CT files/folders
+- To reduce size of .exe file or distribution package in the end
+	- Delete folder helper_scripts and tests 
+	- Delete these folders in src: icons, config_defaults + all pycache/eggs folders
+	- Delete also resources.qrc
 - In cmd.exe (not from Anaconda):
-	- cd ....path...to...\Shield_NM_CT (the new stripped folder)
-- pip install -e . 
-	- (if error on cwd None, try this: pip install --upgrade pip setuptools wheel --user)
+	- cd to to_exe
+	- python -m venv vShield (creates a virtual environment within to_exe)
+	- vShield\Scripts\activate.bat (activates the venv)
+	- cd to the folder above folder src
+	- pip install -e . 
+	- Optionally try running the program with: python -m Shield_NM_CT.Shield_NM_CT
 - pip install pyinstaller (or pip list to see if its already installed)
 - maybe: pip uninstall pathlib (have had some troubles and this solved it)
 

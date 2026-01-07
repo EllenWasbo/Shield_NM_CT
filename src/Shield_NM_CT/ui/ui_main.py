@@ -211,6 +211,8 @@ class MainWindow(QMainWindow):
 
         self.update_image()
 
+        self.update_recently_opened_list()
+
         if len(warnings) > 0:
             QTimer.singleShot(300, lambda: self.show_warnings(warnings))
 
@@ -712,6 +714,8 @@ class MainWindow(QMainWindow):
             self.points_tab.update_source_annotations()
             self.wVisual.overlay_selections_changed()
 
+            self.add_path_to_recent(path)
+
     def save_project(self, save_as=False):
         """Save image and tables in folder or update if loaded from folder.
 
@@ -761,6 +765,7 @@ class MainWindow(QMainWindow):
                 ok, _ = cff.save_settings(
                     self.general_values, fname='general_values',
                     temp_config_folder=path)
+                self.add_path_to_recent(path)
             else:
                 QMessageBox.warning(
                     self, 'Failed saving', f'No writing permission for {path}')
@@ -830,11 +835,17 @@ class MainWindow(QMainWindow):
             'Reset split layout', self)
         act_reset_layout.triggered.connect(self.reset_split_sizes)
 
+        self.mRecentlyOpened = QMenu('Recently opened projects...')
+        #self.update_recently_opened_list()
+        self.mRecentlyOpened.aboutToShow.connect(
+            self.update_recently_opened_list)
+
         # fill menus
         mFile = QMenu('&File', self)
-        mFile.addActions([act_load_floor_img, act_load_project, act_save_project,
-                          act_save_project_as, act_clear_all,
-                          act_quit])
+        mFile.addActions([act_load_floor_img, act_load_project])
+        mFile.addMenu(self.mRecentlyOpened)
+        mFile.addActions([
+            act_save_project, act_save_project_as, act_clear_all, act_quit])
         menu_bar.addMenu(mFile)
         mSett = QMenu('&Settings', self)
         mSett.addAction(act_settings)
@@ -848,6 +859,27 @@ class MainWindow(QMainWindow):
                              act_save_project, act_save_project_as])
         tool_bar.addWidget(QLabel('             '))
         tool_bar.addActions([act_reset_layout, act_settings])
+
+    def update_recently_opened_list(self):
+        self.mRecentlyOpened.clear()
+        if len(self.user_prefs.recent_paths) > 0:
+            for path in self.user_prefs.recent_paths:
+                act_this = QAction(path, self)
+                act_this.triggered.connect(
+                    lambda: self.open_project(path=Path(path)))
+                self.mRecentlyOpened.addAction(act_this)
+        else:
+            self.mRecentlyOpened.addAction(
+                QAction('-- nothing in list yet --'))
+
+    def add_path_to_recent(self, path):
+        strpath = str(path)
+        if strpath in self.user_prefs.recent_paths:
+            self.user_prefs.recent_paths.remove(strpath)  # remove older pos
+        self.user_prefs.recent_paths.insert(0, str(path))
+        if len(self.user_prefs.recent_paths) > 10:
+            self.user_prefs.recent_paths.pop(-1)
+        self.update_recently_opened_list()
 
 
 class FloorCanvas(FigureCanvasQTAgg):

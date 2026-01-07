@@ -20,6 +20,7 @@ class UserPreferences:
     annotations_markersize: int = 9
     picker: int = 10
     snap_radius: int = 20
+    recent_paths: list = field(default_factory=list)
 
 
 @dataclass

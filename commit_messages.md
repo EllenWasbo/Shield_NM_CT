@@ -1,3 +1,10 @@
+# v2.1.4
+_07 Jan, 2026_
+
+- Added option to open recent projects. Up to 10 recently opened projects listed in menu File - Recently opened.... Saved in user_preferences.
+- NM sources: increased number of decimals for t1, duration and rest void.
+- Updates to programmers_help.md
+
 # v2.1.3
 _30 Oct, 2025_
 

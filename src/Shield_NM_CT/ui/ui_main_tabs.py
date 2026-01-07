@@ -1129,13 +1129,17 @@ class WallsTab(InputTab):
     def get_pos(self):
         """Get positions for element as defined in figure."""
         if self.active_row > -1:
-            text = (
-                f'{self.main.gui.x0:.0f}, '
-                f'{self.main.gui.y0:.0f}, '
-                f'{self.main.gui.x1:.0f}, '
-                f'{self.main.gui.y1:.0f}'
-                )
             tabitem = self.table.cellWidget(self.active_row, 2)
+            try:
+                text = (
+                    f'{self.main.gui.x0:.0f}, '
+                    f'{self.main.gui.y0:.0f}, '
+                    f'{self.main.gui.x1:.0f}, '
+                    f'{self.main.gui.y1:.0f}'
+                    )
+            except TypeError:
+                text = ''
+
             try:
                 tabitem.setText(text)
                 self.table_list[self.active_row][2] = text
@@ -1422,11 +1426,11 @@ class NMsourcesTab(InputTab):
         self.table.setCellWidget(row, 5, uir.CellSpinBox(
             self, row=row, col=5, max_val=100000, step=10, decimals=0))
         self.table.setCellWidget(row, 6, uir.CellSpinBox(
-            self, row=row, col=6, max_val=1000, step=0.1, decimals=1))
+            self, row=row, col=6, max_val=1000, step=0.1, decimals=2))
         self.table.setCellWidget(row, 7, uir.CellSpinBox(
-            self, row=row, col=7, max_val=100, step=0.1, decimals=1))
+            self, row=row, col=7, max_val=100, step=0.1, decimals=2))
         self.table.setCellWidget(row, 8, uir.CellSpinBox(
-            self, initial_value=1., row=row, col=8))
+            self, initial_value=1., row=row, col=8, decimals=2))
         self.table.setCellWidget(row, 9, uir.CellSpinBox(
             self, row=row, col=9, max_val=100, step=1, decimals=2))
 
