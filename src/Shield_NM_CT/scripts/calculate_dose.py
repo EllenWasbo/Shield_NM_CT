@@ -142,7 +142,7 @@ def calculate_dose(main, source_number=None, modality=None):
 
         if 'OT' in sources and progress_modal.wasCanceled() is False:
             dose_OT = calculate_dose_kV(
-                sources['OT'], walls, main.shield_data,
+                sources['OT'], None, walls, main.shield_data,
                 main.occ_map.shape, calibration_factor, main.general_values,
                 progress_modal, current_progress_value, step, msgs
                 )

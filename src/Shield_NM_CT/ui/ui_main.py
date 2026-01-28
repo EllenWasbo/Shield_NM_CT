@@ -14,14 +14,14 @@ from pathlib import Path
 import shutil
 import webbrowser
 
-from PyQt6.QtGui import QIcon, QKeyEvent, QCursor, QAction
+from PyQt6.QtGui import QIcon, QKeyEvent, QAction
 from PyQt6.QtCore import Qt, QTimer, QFile, QIODevice
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QGroupBox, QButtonGroup, QScrollArea, QTabWidget,
     QPushButton, QLabel, QSpinBox,
     QRadioButton, QCheckBox, QSlider, QToolButton,
-    QMenu, QMessageBox, QFileDialog, QDialog
+    QMenu, QMessageBox, QFileDialog
     )
 
 import matplotlib as mpl

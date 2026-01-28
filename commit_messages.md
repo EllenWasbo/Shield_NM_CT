@@ -1,3 +1,8 @@
+# v2.1.5
+_28 Jan, 2026_
+
+Fixed error that preventet calculations for "other kV sources".
+
 # v2.1.4
 _07 Jan, 2026_
 
